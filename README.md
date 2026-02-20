@@ -2,100 +2,82 @@
 
 macOS menu bar app for managing [Claude Code](https://docs.anthropic.com/en/docs/claude-code) permission requests via native notifications.
 
-Integrates with Claude Code's hook system to receive tool execution permission requests (Bash, Write, Edit, etc.) as macOS notifications and respond with Allow / Deny. Optionally enable [ntfy](https://ntfy.sh) integration to respond from your iPhone remotely.
+When Claude Code needs permission to run a tool (Bash, Write, Edit, etc.), asuku delivers it as a macOS notification with Allow / Deny actions. You can also respond from your iPhone via [ntfy](https://ntfy.sh).
 
 [Japanese / 日本語](README-jp.md)
 
 ## Features
 
-- **Menu bar UI** — Pending request list, Allow/Deny buttons, recent activity
-- **macOS notifications** — Alert-style notifications with instant Allow/Deny actions
-- **iPhone notifications (opt-in)** — Respond remotely via ntfy.sh + Cloudflare Tunnel
-- **Auto-deny timeout** — Auto-denies after 280s (before Claude Code's 300s hook timeout)
-- **Sensitive data masking** — Automatically masks tokens and API keys
-- **One-click hook install** — Auto-registers hooks in Claude Code's `settings.json`
-- **Launch at login** — Via SMAppService
+- **macOS notifications** — Alert-style with Allow / Deny actions
+- **Menu bar UI** — Pending requests, quick actions, recent activity
+- **iPhone notifications** — Respond remotely via ntfy + Cloudflare Tunnel (opt-in)
+- **Auto-deny timeout** — Automatically denies after 280s
+- **Sensitive data masking** — Tokens and API keys are masked in notifications
+- **One-click hook install** — Registers hooks in Claude Code settings
+- **Launch at login**
 
 ## Requirements
 
 - macOS 14.0 (Sonoma) or later
 - Swift 6.0+
-- Claude Code installed
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 
-## Build
+## Getting Started
+
+### 1. Build and launch
 
 ```bash
-# Build
-swift build
-
-# Build app bundle (.app with code signing)
 scripts/build-app.sh
-
-# Run
 open .build/asuku.app
 ```
 
-The app bundle is generated at `.build/asuku.app`, containing both `AsukuApp` (menu bar app) and `asuku-hook` (CLI hook binary).
+### 2. Install the hook
 
-## Setup
+Click **"Install Hook..."** in the menu bar dropdown, or go to **Settings → Install Hook to Claude Code**.
 
-### 1. Install Hook
+This registers asuku as a [Claude Code hook](https://docs.anthropic.com/en/docs/claude-code/hooks) in `~/.claude/settings.json`.
 
-After launching the app, register hooks using either:
+### 3. Configure notifications
 
-- **Menu bar** → "Install Hook..." button
-- **Settings** → "Install Hook to Claude Code" button
+On first launch, grant notification permission when prompted. Then go to **System Settings → Notifications → asuku** and set the style to **Alerts** (not Banners) so that Allow / Deny buttons are always visible.
 
-This adds `PermissionRequest` (sync, 300s timeout) and `Notification` (async) hooks to `~/.claude/settings.json`.
+### 4. Use it
 
-### 2. Grant Notification Permission
+Start Claude Code as usual. When it needs permission, you'll see:
 
-On first launch, macOS will prompt for notification permission. For best results, go to System Settings → Notifications → asuku and set the notification style to **Alerts**.
+- A **macOS notification** with Allow / Deny buttons
+- The request in the **menu bar dropdown** with Allow / Deny buttons
+
+Respond from either place. If you don't respond within 280 seconds, the request is automatically denied.
 
 ## iPhone Notifications (ntfy)
 
-Combine ntfy.sh with Cloudflare Tunnel to respond to permission requests from your iPhone. Disabled by default.
+Optionally receive permission requests on your iPhone and respond remotely. Useful when you're away from your Mac while Claude Code is running.
 
-### Architecture
+### How it works
 
-```
-[Permission Request]
-        |
-[AppState] ── macOS notification (always)
-        |
-        └── ntfy HTTP POST (opt-in)
-                |
-        [ntfy.sh or self-hosted]
-                |
-        [iPhone: ntfy app]
-        User taps Allow/Deny
-                |
-        [Cloudflare Tunnel]
-                |
-        [WebhookServer on 127.0.0.1:8945]
-                |
-        [AppState.resolveRequest] ← first-response-wins
-```
+1. Permission request arrives → asuku sends a push notification via [ntfy.sh](https://ntfy.sh)
+2. Your iPhone shows the notification with **Allow** / **Deny** buttons
+3. Tapping a button sends a webhook back through [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to your Mac
+4. Whichever responds first (Mac or iPhone) wins — the other is ignored
 
-Whichever responds first (macOS notification or iPhone ntfy) wins. `PendingRequestManager.resolve()` prevents duplicate resolution.
-
-### Setup: Docker (recommended)
+### Quick setup with Docker
 
 ```bash
-# Using ntfy.sh public server
+# Using ntfy.sh public server (simplest)
 ./docker/start.sh
 
-# With self-hosted ntfy server
+# Or with a self-hosted ntfy server (more private)
 ./docker/start.sh --selfhosted
 ```
 
-Paste the URLs printed by the script into the corresponding fields in Settings.
+The script starts cloudflared (and optionally ntfy) in Docker, then prints the tunnel URLs. Paste them into **Settings → iPhone Notifications (ntfy)**.
 
-### Setup: Manual
+### Manual setup
 
 1. Install the [ntfy app](https://apps.apple.com/app/ntfy/id1625396347) on your iPhone
-2. Enable "iPhone Notifications (ntfy)" in Settings
-3. Subscribe to the displayed topic in the iPhone ntfy app
+2. In asuku **Settings**, enable **"iPhone Notifications (ntfy)"**
+3. On your iPhone, subscribe to the topic shown in Settings (e.g. `asuku-xxxxxxxx-...`)
 4. Install cloudflared:
    ```bash
    brew install cloudflare/cloudflare/cloudflared
@@ -104,55 +86,47 @@ Paste the URLs printed by the script into the corresponding fields in Settings.
    ```bash
    cloudflared tunnel --url http://localhost:8945
    ```
-6. Paste the tunnel URL into "Webhook URL" in Settings
+6. Copy the `https://xxxxx.trycloudflare.com` URL and paste it into **Webhook URL** in Settings
 
-> **Note:** Quick Tunnel URLs change on each restart. For permanent URLs, use [Named Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
+That's it. The next permission request will appear on both your Mac and iPhone.
 
-## Architecture
+> **Note:** Quick Tunnel URLs change every time cloudflared restarts. For a permanent URL, set up a [Named Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
 
-```
-Sources/
-├── AsukuShared/            Shared library
-│   ├── IPCProtocol.swift     Wire format, message types, sanitizer
-│   └── SocketPath.swift      UDS socket path resolution
-├── AsukuApp/               Menu bar app (macOS)
-│   ├── AsukuApp.swift        @main entry, MenuBarExtra + Settings window
-│   ├── AppState.swift        Central @Observable state, orchestrates all components
-│   ├── IPCServer.swift       Unix Domain Socket server (Network.framework)
-│   ├── PendingRequestManager.swift  Actor managing pending requests + timeouts
-│   ├── NotificationManager.swift    macOS UNUserNotification with Allow/Deny actions
-│   ├── NtfyConfig.swift      UserDefaults-backed ntfy configuration
-│   ├── NtfyNotifier.swift    HTTP POST to ntfy.sh with action buttons
-│   ├── WebhookServer.swift   TCP HTTP server for ntfy webhook callbacks
-│   ├── MenuBarView.swift     Menu bar popover UI
-│   ├── SettingsView.swift    Settings window UI
-│   ├── MenuBarIcon.swift     Terminal icon with badge
-│   ├── HookInstaller.swift   Auto-installs hooks into Claude Code settings
-│   └── LaunchAtLogin.swift   SMAppService wrapper
-└── AsukuHook/              CLI hook binary
-    ├── AsukuHook.swift       Entry point, subcommand dispatch
-    ├── PermissionRequestHandler.swift  Sync hook: send request, wait for response
-    ├── NotificationHandler.swift       Async hook: fire-and-forget notification
-    └── IPCClient.swift       UDS client with retry
-
-docker/
-├── docker-compose.yml      cloudflared + optional self-hosted ntfy
-└── start.sh                Helper script to start services and extract tunnel URLs
-```
-
-### Data Flow
-
-1. **Claude Code** → `asuku-hook permission-request` (stdin: JSON)
-2. **asuku-hook** → IPC message over Unix Domain Socket
-3. **AsukuApp IPCServer** → `AppState.handlePermissionRequest`
-4. **AppState** → macOS notification + ntfy notification (if enabled)
-5. **User responds** via macOS notification, menu bar UI, or iPhone ntfy
-6. **AppState.resolveRequest** → IPC response → **asuku-hook** → stdout JSON → **Claude Code**
-
-## Tests
+### Stopping
 
 ```bash
+# If using Docker
+docker compose -f docker/docker-compose.yml down
+
+# If manual
+# Just stop the cloudflared process (Ctrl+C)
+```
+
+## Troubleshooting
+
+**Notifications don't appear**
+- Check System Settings → Notifications → asuku is enabled with **Alerts** style
+- Verify the hook is installed: look for `asuku-hook` entries in `~/.claude/settings.json`
+
+**iPhone notifications not working**
+- Verify the webhook server shows a green indicator in Settings
+- Test the webhook manually: `curl -X POST http://localhost:8945/webhook/allow/test-id` (should return 403 — this confirms the server is running)
+- Check that the cloudflared tunnel is running and the Webhook URL is set
+
+**Port conflict**
+- If port 8945 is in use, change the **Webhook Port** in Settings and restart the webhook server
+
+## Development
+
+```bash
+# Build
+swift build
+
+# Run tests
 swift test
+
+# Build .app bundle
+scripts/build-app.sh
 ```
 
 ## License
