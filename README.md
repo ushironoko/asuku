@@ -2,17 +2,19 @@
 
 macOS menu bar app for managing [Claude Code](https://docs.anthropic.com/en/docs/claude-code) permission requests via native notifications.
 
-Claude Code の hook 機能と連携し、ツール実行の許可リクエスト（Bash, Write, Edit 等）をmacOS通知として受け取り、Allow / Deny で応答できます。オプションで [ntfy](https://ntfy.sh) 連携を有効にすると、iPhoneからもリモートで応答可能です。
+Integrates with Claude Code's hook system to receive tool execution permission requests (Bash, Write, Edit, etc.) as macOS notifications and respond with Allow / Deny. Optionally enable [ntfy](https://ntfy.sh) integration to respond from your iPhone remotely.
+
+[Japanese / 日本語](README-jp.md)
 
 ## Features
 
-- **Menu bar UI** — 許可待ちリクエスト一覧、Allow/Deny ボタン、最近のアクティビティ表示
-- **macOS notifications** — Alert スタイル通知で即座に Allow/Deny を選択
-- **iPhone notifications (opt-in)** — ntfy.sh + Cloudflare Tunnel 経由で iPhone から応答
-- **Auto-deny timeout** — 280秒で自動Deny（Claude Code の 300秒タイムアウト前に）
-- **Sensitive data masking** — トークンやAPIキーを自動マスク
-- **One-click hook install** — Claude Code の `settings.json` にフックを自動登録
-- **Launch at login** — SMAppService によるログイン時自動起動
+- **Menu bar UI** — Pending request list, Allow/Deny buttons, recent activity
+- **macOS notifications** — Alert-style notifications with instant Allow/Deny actions
+- **iPhone notifications (opt-in)** — Respond remotely via ntfy.sh + Cloudflare Tunnel
+- **Auto-deny timeout** — Auto-denies after 280s (before Claude Code's 300s hook timeout)
+- **Sensitive data masking** — Automatically masks tokens and API keys
+- **One-click hook install** — Auto-registers hooks in Claude Code's `settings.json`
+- **Launch at login** — Via SMAppService
 
 ## Requirements
 
@@ -33,26 +35,26 @@ scripts/build-app.sh
 open .build/asuku.app
 ```
 
-App bundle は `.build/asuku.app` に生成されます。`AsukuApp`（メニューバーアプリ）と `asuku-hook`（CLI フック）の両方がバンドルに含まれます。
+The app bundle is generated at `.build/asuku.app`, containing both `AsukuApp` (menu bar app) and `asuku-hook` (CLI hook binary).
 
 ## Setup
 
-### 1. Hook のインストール
+### 1. Install Hook
 
-アプリ起動後、以下のいずれかでフックを登録:
+After launching the app, register hooks using either:
 
-- **メニューバー** → "Install Hook..." ボタン
-- **Settings** → "Install Hook to Claude Code" ボタン
+- **Menu bar** → "Install Hook..." button
+- **Settings** → "Install Hook to Claude Code" button
 
-これにより `~/.claude/settings.json` に `PermissionRequest`（同期、300秒タイムアウト）と `Notification`（非同期）のフックが追加されます。
+This adds `PermissionRequest` (sync, 300s timeout) and `Notification` (async) hooks to `~/.claude/settings.json`.
 
-### 2. 通知の許可
+### 2. Grant Notification Permission
 
-初回起動時にmacOS通知の許可を求められます。**Alert スタイル**で通知されるように、システム設定 → 通知 → asuku で「通知スタイル」を「通知パネル」に設定してください。
+On first launch, macOS will prompt for notification permission. For best results, go to System Settings → Notifications → asuku and set the notification style to **Alerts**.
 
 ## iPhone Notifications (ntfy)
 
-ntfy.sh と Cloudflare Tunnel を組み合わせて、iPhone からも Allow/Deny を応答できます。デフォルトは無効です。
+Combine ntfy.sh with Cloudflare Tunnel to respond to permission requests from your iPhone. Disabled by default.
 
 ### Architecture
 
@@ -75,36 +77,36 @@ ntfy.sh と Cloudflare Tunnel を組み合わせて、iPhone からも Allow/Den
         [AppState.resolveRequest] ← first-response-wins
 ```
 
-macOS通知と ntfy のどちらが先に応答しても、`PendingRequestManager.resolve()` は二重解決を防ぎます（先着勝ち）。
+Whichever responds first (macOS notification or iPhone ntfy) wins. `PendingRequestManager.resolve()` prevents duplicate resolution.
 
 ### Setup: Docker (recommended)
 
 ```bash
-# ntfy.sh 公開サーバーを使う場合
+# Using ntfy.sh public server
 ./docker/start.sh
 
-# セルフホスト ntfy も含める場合
+# With self-hosted ntfy server
 ./docker/start.sh --selfhosted
 ```
 
-スクリプトが表示する URL を Settings の対応フィールドに貼り付けてください。
+Paste the URLs printed by the script into the corresponding fields in Settings.
 
 ### Setup: Manual
 
-1. iPhone に [ntfy アプリ](https://apps.apple.com/app/ntfy/id1625396347)をインストール
-2. Settings → "iPhone Notifications (ntfy)" を有効化
-3. 表示された Topic を iPhone の ntfy アプリで購読
-4. cloudflared をインストール:
+1. Install the [ntfy app](https://apps.apple.com/app/ntfy/id1625396347) on your iPhone
+2. Enable "iPhone Notifications (ntfy)" in Settings
+3. Subscribe to the displayed topic in the iPhone ntfy app
+4. Install cloudflared:
    ```bash
    brew install cloudflare/cloudflare/cloudflared
    ```
-5. トンネルを起動:
+5. Start the tunnel:
    ```bash
    cloudflared tunnel --url http://localhost:8945
    ```
-6. 表示されたトンネル URL を Settings の "Webhook URL" に貼り付け
+6. Paste the tunnel URL into "Webhook URL" in Settings
 
-> **Note:** Quick Tunnel の URL は起動ごとに変わります。恒久的な URL が必要な場合は [Named Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) を使用してください。
+> **Note:** Quick Tunnel URLs change on each restart. For permanent URLs, use [Named Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
 
 ## Architecture
 
