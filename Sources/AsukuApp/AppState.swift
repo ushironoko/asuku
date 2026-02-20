@@ -34,10 +34,15 @@ final class AppState {
     var recentEvents: [RecentEvent] = []
     var isServerRunning = false
     var notificationPermissionGranted = false
+    var isWebhookServerRunning = false
+    var webhookServerError: String?
 
     let pendingManager = PendingRequestManager()
     let notificationManager = NotificationManager()
+    let ntfyConfig = NtfyConfig()
     private var ipcServer: IPCServer?
+    private var ntfyNotifier: NtfyNotifier?
+    private var webhookServer: WebhookServer?
 
     /// Maximum recent events to keep
     private let maxRecentEvents = 50
@@ -47,6 +52,8 @@ final class AppState {
         startServer()
         // Setup handlers
         setupNotificationHandler()
+        // Setup ntfy integration
+        setupNtfy()
         // Request notification permission asynchronously
         Task { @MainActor [weak self] in
             await self?.setupAsync()
@@ -126,6 +133,70 @@ final class AppState {
         ipcServer?.stop()
         ipcServer = nil
         isServerRunning = false
+        stopWebhookServer()
+    }
+
+    // MARK: - Ntfy integration
+
+    private func setupNtfy() {
+        ntfyNotifier = NtfyNotifier(config: ntfyConfig)
+        if ntfyConfig.isEnabled {
+            startWebhookServer()
+        }
+    }
+
+    func ntfyConfigChanged() {
+        if ntfyConfig.isEnabled {
+            startWebhookServer()
+        } else {
+            stopWebhookServer()
+        }
+    }
+
+    private func startWebhookServer() {
+        stopWebhookServer()
+
+        let server = WebhookServer(port: ntfyConfig.webhookPort, secret: ntfyConfig.webhookSecret)
+
+        server.onWebhookResponse = { [weak self] requestId, decision in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.resolveRequest(requestId: requestId, decision: decision)
+            }
+        }
+
+        // Propagate async NWListener state changes to update UI accurately
+        server.onStateChange = { [weak self] state in
+            guard let self else { return }
+            Task { @MainActor in
+                switch state {
+                case .ready:
+                    self.isWebhookServerRunning = true
+                    self.webhookServerError = nil
+                case .failed(let errorDescription):
+                    self.isWebhookServerRunning = false
+                    self.webhookServerError = errorDescription
+                }
+            }
+        }
+
+        do {
+            try server.start()
+            webhookServer = server
+            // Note: isWebhookServerRunning is set via onStateChange when listener reports .ready
+            print("[AppState] Webhook server starting on port \(ntfyConfig.webhookPort)")
+        } catch {
+            print("[AppState] Failed to start webhook server: \(error)")
+            isWebhookServerRunning = false
+            webhookServerError = error.localizedDescription
+        }
+    }
+
+    private func stopWebhookServer() {
+        webhookServer?.stop()
+        webhookServer = nil
+        isWebhookServerRunning = false
+        webhookServerError = nil
     }
 
     // MARK: - Request handling
@@ -158,6 +229,8 @@ final class AppState {
 
         if let request = await pendingManager.getRequest(event.requestId) {
             await notificationManager.showPermissionRequest(request)
+            // ntfy notification (sends only when enabled)
+            await ntfyNotifier?.sendPermissionRequest(request)
         }
     }
 

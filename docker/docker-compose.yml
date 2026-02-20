@@ -1,0 +1,37 @@
+services:
+  # Cloudflare Tunnel for webhook server (always required)
+  # Quick Tunnel mode (default): random *.trycloudflare.com URL, no account needed
+  # Named Tunnel mode: set CLOUDFLARE_TUNNEL_TOKEN via start.sh --token
+  tunnel-webhook:
+    image: cloudflare/cloudflared:2026.2.0
+    command: ${TUNNEL_WEBHOOK_COMMAND:-tunnel --no-autoupdate --url http://host.docker.internal:8945}
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # Self-hosted ntfy server (optional — use profile "selfhosted")
+  # Replaces ntfy.sh public server for privacy
+  ntfy:
+    image: binwiederhier/ntfy:v2.17.0
+    command: serve
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+    profiles:
+      - selfhosted
+    restart: unless-stopped
+
+  # Cloudflare Quick Tunnel for ntfy server (optional — Quick Tunnel mode only)
+  # NOT started in Named Tunnel mode; Named Tunnel routes are configured in Cloudflare dashboard.
+  tunnel-ntfy:
+    image: cloudflare/cloudflared:2026.2.0
+    command: tunnel --no-autoupdate --url http://ntfy:80
+    depends_on:
+      - ntfy
+    profiles:
+      - selfhosted-tunnel
+    restart: unless-stopped
+
+volumes:
+  ntfy-cache:
