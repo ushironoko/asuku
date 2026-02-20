@@ -22,15 +22,15 @@ services:
       - selfhosted
     restart: unless-stopped
 
-  # Cloudflare Tunnel for ntfy server (optional — use profile "selfhosted")
-  # Only used with Quick Tunnel. Named Tunnel routes are configured in Cloudflare dashboard.
+  # Cloudflare Quick Tunnel for ntfy server (optional — Quick Tunnel mode only)
+  # NOT started in Named Tunnel mode; Named Tunnel routes are configured in Cloudflare dashboard.
   tunnel-ntfy:
     image: cloudflare/cloudflared:2026.2.0
     command: tunnel --no-autoupdate --url http://ntfy:80
     depends_on:
       - ntfy
     profiles:
-      - selfhosted
+      - selfhosted-tunnel
     restart: unless-stopped
 
 volumes:

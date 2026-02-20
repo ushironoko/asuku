@@ -40,9 +40,16 @@ final class NtfyNotifier {
 
         // Action buttons — ntfy supports HTTP actions
         // Include webhook secret as query parameter for authentication
-        let token = config.webhookSecret
-        let allowURL = "\(webhookBase)/webhook/allow/\(request.id)?token=\(token)"
-        let denyURL = "\(webhookBase)/webhook/deny/\(request.id)?token=\(token)"
+        guard let allowURL = buildWebhookURL(
+            base: webhookBase, action: "allow", requestID: request.id,
+            token: config.webhookSecret),
+            let denyURL = buildWebhookURL(
+                base: webhookBase, action: "deny", requestID: request.id,
+                token: config.webhookSecret)
+        else {
+            print("[NtfyNotifier] Failed to build webhook action URLs")
+            return
+        }
         let actions = [
             "http, Allow, \(allowURL), method=POST",
             "http, Deny, \(denyURL), method=POST",
@@ -64,6 +71,17 @@ final class NtfyNotifier {
         } catch {
             print("[NtfyNotifier] Failed to send notification: \(error)")
         }
+    }
+
+    private func buildWebhookURL(
+        base: String, action: String, requestID: String, token: String
+    ) -> String? {
+        guard var components = URLComponents(string: "\(base)/webhook/\(action)/\(requestID)")
+        else {
+            return nil
+        }
+        components.queryItems = [URLQueryItem(name: "token", value: token)]
+        return components.url?.absoluteString
     }
 
     private func buildNotificationBody(_ request: PendingRequest) -> String {

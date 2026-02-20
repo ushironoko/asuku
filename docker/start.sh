@@ -15,14 +15,12 @@ usage() {
     echo "  -h, --help          Show this help"
 }
 
-PROFILE_ARGS=""
 SELFHOSTED=false
 TUNNEL_TOKEN=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --selfhosted)
-            PROFILE_ARGS="--profile selfhosted"
             SELFHOSTED=true
             shift
             ;;
@@ -55,6 +53,17 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     NAMED_TUNNEL=true
     export CLOUDFLARE_TUNNEL_TOKEN="$TUNNEL_TOKEN"
     export TUNNEL_WEBHOOK_COMMAND="tunnel --no-autoupdate run"
+fi
+
+# Build profile args based on mode
+# selfhosted profile: starts ntfy server only
+# selfhosted-tunnel profile: starts Quick Tunnel for ntfy (not used in Named Tunnel mode)
+PROFILE_ARGS=""
+if [ "$SELFHOSTED" = true ]; then
+    PROFILE_ARGS="--profile selfhosted"
+    if [ "$NAMED_TUNNEL" = false ]; then
+        PROFILE_ARGS="$PROFILE_ARGS --profile selfhosted-tunnel"
+    fi
 fi
 
 echo "Starting asuku notification services..."
