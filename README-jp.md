@@ -61,6 +61,14 @@ Claude Code をいつも通り起動するだけです。ツール実行の許�
 3. ボタンをタップすると [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) 経由で Mac に webhook が届く
 4. Mac と iPhone のどちらが先に応答しても、もう一方は無視される（先着勝ち）
 
+### 前提
+
+1. iPhone に [ntfy アプリ](https://apps.apple.com/app/ntfy/id1625396347)をインストール
+2. asuku の **Settings** で **"iPhone Notifications (ntfy)"** を有効化
+3. iPhone の ntfy アプリで Settings に表示されたトピック（例: `asuku-xxxxxxxx-...`）を購読
+
+以下の Docker または手動セットアップで Cloudflare Tunnel を設定してください。
+
 ### Docker で簡単セットアップ
 
 ```bash
@@ -75,18 +83,15 @@ Claude Code をいつも通り起動するだけです。ツール実行の許�
 
 ### 手動セットアップ
 
-1. iPhone に [ntfy アプリ](https://apps.apple.com/app/ntfy/id1625396347)をインストール
-2. asuku の **Settings** で **"iPhone Notifications (ntfy)"** を有効化
-3. iPhone の ntfy アプリで Settings に表示されたトピック（例: `asuku-xxxxxxxx-...`）を購読
-4. cloudflared をインストール：
+1. cloudflared をインストール：
    ```bash
    brew install cloudflare/cloudflare/cloudflared
    ```
-5. トンネルを起動：
+2. トンネルを起動：
    ```bash
    cloudflared tunnel --url http://localhost:8945
    ```
-6. 表示される `https://xxxxx.trycloudflare.com` の URL をコピーし、Settings の **Webhook URL** に貼り付け
+3. 表示される `https://xxxxx.trycloudflare.com` の URL をコピーし、Settings の **Webhook URL** に貼り付け
 
 これで次の許可リクエストから Mac と iPhone の両方に通知が届きます。
 

@@ -61,6 +61,14 @@ Optionally receive permission requests on your iPhone and respond remotely. Usef
 3. Tapping a button sends a webhook back through [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to your Mac
 4. Whichever responds first (Mac or iPhone) wins — the other is ignored
 
+### Prerequisites
+
+1. Install the [ntfy app](https://apps.apple.com/app/ntfy/id1625396347) on your iPhone
+2. In asuku **Settings**, enable **"iPhone Notifications (ntfy)"**
+3. On your iPhone, subscribe to the topic shown in Settings (e.g. `asuku-xxxxxxxx-...`)
+
+Then choose either Docker or manual setup below to configure Cloudflare Tunnel.
+
 ### Quick setup with Docker
 
 ```bash
@@ -75,18 +83,15 @@ The script starts cloudflared (and optionally ntfy) in Docker, then prints the t
 
 ### Manual setup
 
-1. Install the [ntfy app](https://apps.apple.com/app/ntfy/id1625396347) on your iPhone
-2. In asuku **Settings**, enable **"iPhone Notifications (ntfy)"**
-3. On your iPhone, subscribe to the topic shown in Settings (e.g. `asuku-xxxxxxxx-...`)
-4. Install cloudflared:
+1. Install cloudflared:
    ```bash
    brew install cloudflare/cloudflare/cloudflared
    ```
-5. Start the tunnel:
+2. Start the tunnel:
    ```bash
    cloudflared tunnel --url http://localhost:8945
    ```
-6. Copy the `https://xxxxx.trycloudflare.com` URL and paste it into **Webhook URL** in Settings
+3. Copy the `https://xxxxx.trycloudflare.com` URL and paste it into **Webhook URL** in Settings
 
 That's it. The next permission request will appear on both your Mac and iPhone.
 
