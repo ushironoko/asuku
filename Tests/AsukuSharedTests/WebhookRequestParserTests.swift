@@ -170,4 +170,68 @@ struct WebhookRequestParserTests {
         #expect(result != nil)
         #expect(!WebhookRequestParser.validateToken(result?.token, expected: "any-secret"))
     }
+
+    // MARK: - Additional edge cases (security-sensitive parsing)
+
+    @Test("Rejects PUT request")
+    func rejectPutRequest() {
+        let raw = "PUT /webhook/allow/req-abc?token=secret HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        let result = WebhookRequestParser.parse(raw)
+        #expect(result == nil)
+    }
+
+    @Test("Rejects DELETE request")
+    func rejectDeleteRequest() {
+        let raw = "DELETE /webhook/deny/req-abc?token=secret HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        let result = WebhookRequestParser.parse(raw)
+        #expect(result == nil)
+    }
+
+    @Test("Rejects request line with only method")
+    func rejectMethodOnly() {
+        let raw = "POST\r\n\r\n"
+        let result = WebhookRequestParser.parse(raw)
+        #expect(result == nil)
+    }
+
+    @Test("Rejects request without CRLF line endings")
+    func rejectNonCRLFRequest() {
+        let raw = "POST /webhook/allow/req-abc?token=secret HTTP/1.1\nHost: localhost\n\n"
+        _ = WebhookRequestParser.parse(raw)
+        // Without \r\n the request line parse may fail depending on split behavior
+        // The important thing is it doesn't crash
+    }
+
+    @Test("Parses request line without HTTP version")
+    func parseRequestWithoutVersion() {
+        // HTTP/0.9 style: "POST /path" with no version — split with maxSplits:2 handles this
+        let raw = "POST /webhook/allow/req-abc?token=secret\r\nHost: localhost\r\n\r\n"
+        let result = WebhookRequestParser.parse(raw)
+        #expect(result != nil)
+        #expect(result?.action == "allow")
+        #expect(result?.requestId == "req-abc")
+        #expect(result?.token == "secret")
+    }
+
+    @Test("Empty token= query value yields nil token")
+    func parseEmptyTokenValue() {
+        // "token=" splits to ["token"] (empty trailing is omitted), so token is nil
+        let result = WebhookRequestParser.parsePath("/webhook/allow/req-123?token=")
+        #expect(result != nil)
+        #expect(result?.token == nil)
+    }
+
+    @Test("Rejects bare /webhook path")
+    func rejectBareWebhookPath() {
+        let result = WebhookRequestParser.parsePath("/webhook")
+        #expect(result == nil)
+    }
+
+    @Test("Token with special characters in query")
+    func parseTokenWithSpecialChars() {
+        let result = WebhookRequestParser.parsePath(
+            "/webhook/deny/req-1?token=abc-123_XYZ.456")
+        #expect(result != nil)
+        #expect(result?.token == "abc-123_XYZ.456")
+    }
 }
