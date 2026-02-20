@@ -47,12 +47,12 @@ NTFY_URL=""
 for i in $(seq 1 $MAX_ATTEMPTS); do
     if [ -z "$WEBHOOK_URL" ]; then
         WEBHOOK_URL=$(docker compose -f "$COMPOSE_FILE" $PROFILE_ARGS logs tunnel-webhook 2>&1 \
-            | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | head -1 || true)
+            | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true)
     fi
 
     if [ "$SELFHOSTED" = true ] && [ -z "$NTFY_URL" ]; then
         NTFY_URL=$(docker compose -f "$COMPOSE_FILE" $PROFILE_ARGS logs tunnel-ntfy 2>&1 \
-            | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | head -1 || true)
+            | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true)
     fi
 
     # Check if we have all needed URLs

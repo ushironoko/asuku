@@ -39,8 +39,10 @@ final class NtfyNotifier {
         urlRequest.setValue("warning", forHTTPHeaderField: "Tags")
 
         // Action buttons — ntfy supports HTTP actions
-        let allowURL = "\(webhookBase)/webhook/allow/\(request.id)"
-        let denyURL = "\(webhookBase)/webhook/deny/\(request.id)"
+        // Include webhook secret as query parameter for authentication
+        let token = config.webhookSecret
+        let allowURL = "\(webhookBase)/webhook/allow/\(request.id)?token=\(token)"
+        let denyURL = "\(webhookBase)/webhook/deny/\(request.id)?token=\(token)"
         let actions = [
             "http, Allow, \(allowURL), method=POST",
             "http, Deny, \(denyURL), method=POST",

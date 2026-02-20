@@ -2,18 +2,29 @@ import AsukuShared
 import Foundation
 import Network
 
+/// Webhook server state reported asynchronously via NWListener
+enum WebhookServerState: Sendable {
+    case ready
+    case failed(String)
+}
+
 /// Lightweight HTTP server for receiving ntfy webhook callbacks.
 /// Listens on 127.0.0.1 (localhost only) — cloudflared tunnels traffic from the internet.
 final class WebhookServer: @unchecked Sendable {
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "asuku.webhook.server")
     private let port: UInt16
+    private let secret: String
 
     /// Called when a webhook response arrives: (requestId, decision)
     var onWebhookResponse: (@Sendable (String, PermissionDecision) -> Void)?
 
-    init(port: UInt16) {
+    /// Called when the listener state changes asynchronously (ready, failed)
+    var onStateChange: (@Sendable (WebhookServerState) -> Void)?
+
+    init(port: UInt16, secret: String) {
         self.port = port
+        self.secret = secret
     }
 
     func start() throws {
@@ -32,8 +43,10 @@ final class WebhookServer: @unchecked Sendable {
             switch state {
             case .ready:
                 print("[WebhookServer] Listening on 127.0.0.1:\(self?.port ?? 0)")
+                self?.onStateChange?(.ready)
             case .failed(let error):
                 print("[WebhookServer] Listener failed: \(error)")
+                self?.onStateChange?(.failed(error.localizedDescription))
                 self?.listener?.cancel()
             default:
                 break
@@ -120,39 +133,20 @@ final class WebhookServer: @unchecked Sendable {
     // MARK: - HTTP request processing
 
     private func processHTTPRequest(_ raw: String, connection: NWConnection) {
-        // Parse request line: "POST /webhook/allow/<id> HTTP/1.1\r\n..."
-        guard let requestLine = raw.split(separator: "\r\n", maxSplits: 1).first else {
-            sendHTTPResponse(connection: connection, statusCode: 400, body: "Bad Request")
-            return
-        }
-
-        let parts = requestLine.split(separator: " ", maxSplits: 2)
-        guard parts.count >= 2 else {
-            sendHTTPResponse(connection: connection, statusCode: 400, body: "Bad Request")
-            return
-        }
-
-        let method = String(parts[0])
-        let path = String(parts[1])
-
-        guard method == "POST" else {
-            sendHTTPResponse(connection: connection, statusCode: 405, body: "Method Not Allowed")
-            return
-        }
-
-        // Route: POST /webhook/allow/<requestId> or POST /webhook/deny/<requestId>
-        let pathComponents = path.split(separator: "/")
-        guard pathComponents.count == 3,
-            pathComponents[0] == "webhook",
-            let action = pathComponents[safe: 1],
-            let requestId = pathComponents[safe: 2]
-        else {
+        guard let request = WebhookRequestParser.parse(raw) else {
             sendHTTPResponse(connection: connection, statusCode: 404, body: "Not Found")
             return
         }
 
+        // Validate authentication token
+        guard WebhookRequestParser.validateToken(request.token, expected: secret) else {
+            print("[WebhookServer] Rejected request with invalid token for \(request.requestId)")
+            sendHTTPResponse(connection: connection, statusCode: 403, body: "Forbidden")
+            return
+        }
+
         let decision: PermissionDecision
-        switch String(action) {
+        switch request.action {
         case "allow":
             decision = .allow
         case "deny":
@@ -162,10 +156,9 @@ final class WebhookServer: @unchecked Sendable {
             return
         }
 
-        let requestIdString = String(requestId)
-        print("[WebhookServer] Received \(decision.rawValue) for \(requestIdString)")
+        print("[WebhookServer] Received \(decision.rawValue) for \(request.requestId)")
 
-        onWebhookResponse?(requestIdString, decision)
+        onWebhookResponse?(request.requestId, decision)
         sendHTTPResponse(connection: connection, statusCode: 200, body: "OK")
     }
 
@@ -176,6 +169,7 @@ final class WebhookServer: @unchecked Sendable {
         switch statusCode {
         case 200: statusText = "OK"
         case 400: statusText = "Bad Request"
+        case 403: statusText = "Forbidden"
         case 404: statusText = "Not Found"
         case 405: statusText = "Method Not Allowed"
         default: statusText = "Error"
@@ -214,13 +208,5 @@ enum WebhookServerError: Error, LocalizedError {
         case .bindFailed(let reason):
             return "Failed to bind webhook server: \(reason)"
         }
-    }
-}
-
-// MARK: - Collection safe subscript
-
-private extension Collection {
-    subscript(safe index: Index) -> Element? {
-        indices.contains(index) ? self[index] : nil
     }
 }

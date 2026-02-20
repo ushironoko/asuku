@@ -156,7 +156,7 @@ final class AppState {
     private func startWebhookServer() {
         stopWebhookServer()
 
-        let server = WebhookServer(port: ntfyConfig.webhookPort)
+        let server = WebhookServer(port: ntfyConfig.webhookPort, secret: ntfyConfig.webhookSecret)
 
         server.onWebhookResponse = { [weak self] requestId, decision in
             guard let self else { return }
@@ -165,12 +165,26 @@ final class AppState {
             }
         }
 
+        // Propagate async NWListener state changes to update UI accurately
+        server.onStateChange = { [weak self] state in
+            guard let self else { return }
+            Task { @MainActor in
+                switch state {
+                case .ready:
+                    self.isWebhookServerRunning = true
+                    self.webhookServerError = nil
+                case .failed(let errorDescription):
+                    self.isWebhookServerRunning = false
+                    self.webhookServerError = errorDescription
+                }
+            }
+        }
+
         do {
             try server.start()
             webhookServer = server
-            isWebhookServerRunning = true
-            webhookServerError = nil
-            print("[AppState] Webhook server started on port \(ntfyConfig.webhookPort)")
+            // Note: isWebhookServerRunning is set via onStateChange when listener reports .ready
+            print("[AppState] Webhook server starting on port \(ntfyConfig.webhookPort)")
         } catch {
             print("[AppState] Failed to start webhook server: \(error)")
             isWebhookServerRunning = false

@@ -10,6 +10,7 @@ final class NtfyConfig {
     private static let serverURLKey = "ntfy.serverURL"
     private static let webhookBaseURLKey = "ntfy.webhookBaseURL"
     private static let webhookPortKey = "ntfy.webhookPort"
+    private static let webhookSecretKey = "ntfy.webhookSecret"
 
     private let defaults = UserDefaults.standard
 
@@ -33,6 +34,12 @@ final class NtfyConfig {
         didSet { defaults.set(Int(webhookPort), forKey: Self.webhookPortKey) }
     }
 
+    /// Auto-generated shared secret for webhook authentication.
+    /// Included as a query parameter in ntfy action URLs and validated server-side.
+    var webhookSecret: String {
+        didSet { defaults.set(webhookSecret, forKey: Self.webhookSecretKey) }
+    }
+
     init() {
         self.isEnabled = defaults.bool(forKey: Self.enabledKey)
         self.topic = defaults.string(forKey: Self.topicKey)
@@ -41,7 +48,9 @@ final class NtfyConfig {
             ?? "https://ntfy.sh"
         self.webhookBaseURL = defaults.string(forKey: Self.webhookBaseURLKey) ?? ""
         let storedPort = defaults.integer(forKey: Self.webhookPortKey)
-        self.webhookPort = storedPort > 0 ? UInt16(storedPort) : 8945
+        self.webhookPort = storedPort > 0 ? (UInt16(exactly: storedPort) ?? 8945) : 8945
+        self.webhookSecret = defaults.string(forKey: Self.webhookSecretKey)
+            ?? UUID().uuidString
 
         // Persist generated defaults on first launch
         if defaults.string(forKey: Self.topicKey) == nil {
@@ -52,6 +61,9 @@ final class NtfyConfig {
         }
         if storedPort == 0 {
             defaults.set(Int(webhookPort), forKey: Self.webhookPortKey)
+        }
+        if defaults.string(forKey: Self.webhookSecretKey) == nil {
+            defaults.set(webhookSecret, forKey: Self.webhookSecretKey)
         }
     }
 }
