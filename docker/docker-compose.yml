@@ -1,9 +1,12 @@
 services:
   # Cloudflare Tunnel for webhook server (always required)
-  # Tunnels to the host machine's WebhookServer on port 8945
+  # Quick Tunnel mode (default): random *.trycloudflare.com URL, no account needed
+  # Named Tunnel mode: set CLOUDFLARE_TUNNEL_TOKEN via start.sh --token
   tunnel-webhook:
     image: cloudflare/cloudflared:2026.2.0
-    command: tunnel --no-autoupdate --url http://host.docker.internal:8945
+    command: ${TUNNEL_WEBHOOK_COMMAND:-tunnel --no-autoupdate --url http://host.docker.internal:8945}
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -20,7 +23,7 @@ services:
     restart: unless-stopped
 
   # Cloudflare Tunnel for ntfy server (optional — use profile "selfhosted")
-  # Exposes the self-hosted ntfy so iPhone can subscribe
+  # Only used with Quick Tunnel. Named Tunnel routes are configured in Cloudflare dashboard.
   tunnel-ntfy:
     image: cloudflare/cloudflared:2026.2.0
     command: tunnel --no-autoupdate --url http://ntfy:80

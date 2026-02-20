@@ -90,7 +90,11 @@ The script starts cloudflared (and optionally ntfy) in Docker, then prints the t
 
 That's it. The next permission request will appear on both your Mac and iPhone.
 
-> **Note:** Quick Tunnel URLs change every time cloudflared restarts. For a permanent URL, set up a [Named Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
+> **Note:** Quick Tunnel URLs change every time cloudflared restarts. For a permanent URL, use a Named Tunnel with `--token`:
+> ```bash
+> ./docker/start.sh --token <CLOUDFLARE_TUNNEL_TOKEN>
+> ```
+> Obtain a token from the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/).
 
 ### Stopping
 

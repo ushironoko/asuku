@@ -5,15 +5,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 
 usage() {
-    echo "Usage: $0 [--selfhosted]"
+    echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --selfhosted  Also start self-hosted ntfy server + tunnel"
-    echo "                (default: webhook tunnel only, use ntfy.sh public)"
+    echo "  --selfhosted        Also start self-hosted ntfy server + tunnel"
+    echo "                      (default: webhook tunnel only, use ntfy.sh public)"
+    echo "  --token <TOKEN>     Use Cloudflare Named Tunnel (permanent URL)"
+    echo "                      Obtain a token from the Cloudflare Zero Trust dashboard"
+    echo "  -h, --help          Show this help"
 }
 
 PROFILE_ARGS=""
 SELFHOSTED=false
+TUNNEL_TOKEN=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -21,6 +25,14 @@ while [[ $# -gt 0 ]]; do
             PROFILE_ARGS="--profile selfhosted"
             SELFHOSTED=true
             shift
+            ;;
+        --token)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --token requires a value"
+                exit 1
+            fi
+            TUNNEL_TOKEN="$2"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -34,12 +46,53 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Named Tunnel mode: override the command to use token-based tunnel
+NAMED_TUNNEL=false
+export CLOUDFLARE_TUNNEL_TOKEN=""
+export TUNNEL_WEBHOOK_COMMAND=""
+
+if [ -n "$TUNNEL_TOKEN" ]; then
+    NAMED_TUNNEL=true
+    export CLOUDFLARE_TUNNEL_TOKEN="$TUNNEL_TOKEN"
+    export TUNNEL_WEBHOOK_COMMAND="tunnel --no-autoupdate run"
+fi
+
 echo "Starting asuku notification services..."
+if [ "$NAMED_TUNNEL" = true ]; then
+    echo "Mode: Named Tunnel (permanent URL)"
+else
+    echo "Mode: Quick Tunnel (temporary URL)"
+fi
+
 docker compose -f "$COMPOSE_FILE" $PROFILE_ARGS up -d
 
+# Named Tunnel: URL is configured in Cloudflare dashboard, no need to extract
+if [ "$NAMED_TUNNEL" = true ]; then
+    echo ""
+    echo "========================================="
+    echo "  asuku Notification Services"
+    echo "========================================="
+    echo ""
+    echo "Named Tunnel is running."
+    echo "  Webhook URL is configured in your Cloudflare Zero Trust dashboard."
+    echo "  → Paste your tunnel's public hostname into 'Webhook URL' in asuku Settings"
+
+    if [ "$SELFHOSTED" = true ]; then
+        echo ""
+        echo "ntfy server is running locally."
+        echo "  Configure an additional public hostname in Cloudflare dashboard"
+        echo "  pointing to http://ntfy:80 for iPhone access."
+    fi
+
+    echo ""
+    echo "To stop:  docker compose -f $COMPOSE_FILE $PROFILE_ARGS down"
+    echo "To logs:  docker compose -f $COMPOSE_FILE $PROFILE_ARGS logs -f"
+    exit 0
+fi
+
+# Quick Tunnel: poll for generated URLs
 echo "Waiting for tunnels to initialize..."
 
-# Poll for tunnel URLs (max 30 seconds)
 MAX_ATTEMPTS=15
 WEBHOOK_URL=""
 NTFY_URL=""
@@ -97,7 +150,7 @@ fi
 
 echo ""
 echo "NOTE: Quick Tunnel URLs change on each restart."
-echo "  For permanent URLs, use Cloudflare Named Tunnels."
+echo "  For permanent URLs, use: $0 --token <CLOUDFLARE_TUNNEL_TOKEN>"
 echo ""
 echo "To stop:  docker compose -f $COMPOSE_FILE $PROFILE_ARGS down"
 echo "To logs:  docker compose -f $COMPOSE_FILE $PROFILE_ARGS logs -f"

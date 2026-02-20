@@ -90,7 +90,11 @@ Claude Code をいつも通り起動するだけです。ツール実行の許�
 
 これで次の許可リクエストから Mac と iPhone の両方に通知が届きます。
 
-> **Note:** Quick Tunnel の URL は cloudflared を再起動するたびに変わります。恒久的な URL が必要な場合は [Named Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) を設定してください。
+> **Note:** Quick Tunnel の URL は cloudflared を再起動するたびに変わります。恒久的な URL が必要な場合は `--token` で Named Tunnel を使用：
+> ```bash
+> ./docker/start.sh --token <CLOUDFLARE_TUNNEL_TOKEN>
+> ```
+> トークンは [Cloudflare Zero Trust ダッシュボード](https://one.dash.cloudflare.com/)で取得できます。
 
 ### 停止
 
