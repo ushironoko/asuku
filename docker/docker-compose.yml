@@ -1,0 +1,34 @@
+services:
+  # Cloudflare Tunnel for webhook server (always required)
+  # Tunnels to the host machine's WebhookServer on port 8945
+  tunnel-webhook:
+    image: cloudflare/cloudflared:2026.2.0
+    command: tunnel --no-autoupdate --url http://host.docker.internal:8945
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # Self-hosted ntfy server (optional — use profile "selfhosted")
+  # Replaces ntfy.sh public server for privacy
+  ntfy:
+    image: binwiederhier/ntfy:v2.17.0
+    command: serve
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+    profiles:
+      - selfhosted
+    restart: unless-stopped
+
+  # Cloudflare Tunnel for ntfy server (optional — use profile "selfhosted")
+  # Exposes the self-hosted ntfy so iPhone can subscribe
+  tunnel-ntfy:
+    image: cloudflare/cloudflared:2026.2.0
+    command: tunnel --no-autoupdate --url http://ntfy:80
+    depends_on:
+      - ntfy
+    profiles:
+      - selfhosted
+    restart: unless-stopped
+
+volumes:
+  ntfy-cache:
