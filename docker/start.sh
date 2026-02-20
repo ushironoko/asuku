@@ -73,7 +73,15 @@ else
     echo "Mode: Quick Tunnel (temporary URL)"
 fi
 
-docker compose -f "$COMPOSE_FILE" $PROFILE_ARGS up -d
+# Bring down all services (all profiles) before starting to prevent stale
+# containers when switching between modes.  For example, switching from
+# Quick Tunnel (--selfhosted) to Named Tunnel (--selfhosted --token) would
+# otherwise leave tunnel-ntfy running and ntfy publicly exposed.
+docker compose -f "$COMPOSE_FILE" \
+    --profile selfhosted --profile selfhosted-tunnel \
+    down --remove-orphans 2>/dev/null || true
+
+docker compose -f "$COMPOSE_FILE" $PROFILE_ARGS up -d --remove-orphans
 
 # Named Tunnel: URL is configured in Cloudflare dashboard, no need to extract
 if [ "$NAMED_TUNNEL" = true ]; then
