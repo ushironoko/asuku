@@ -53,11 +53,11 @@ if $UNIVERSAL; then
     BUILD_ARGS+=(--arch arm64 --arch x86_64)
 fi
 
+# Get binary output path before building (avoids second swift build invocation)
+BIN_PATH=$(swift build "${BUILD_ARGS[@]}" --show-bin-path)
+
 echo "Building ($CONFIGURATION$(${UNIVERSAL} && echo ', universal' || true))..."
 swift build "${BUILD_ARGS[@]}"
-
-# Get binary output path dynamically
-BIN_PATH=$(swift build "${BUILD_ARGS[@]}" --show-bin-path)
 
 echo "Assembling $APP_NAME..."
 
