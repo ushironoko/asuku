@@ -74,9 +74,14 @@ jobs:
           else
             git tag "$TAG"
           fi
-          REMOTE_TAG=$(git ls-remote --tags origin "$TAG")
-          if echo "$REMOTE_TAG" | grep -q "$TAG"; then
-            REMOTE_TAG_SHA=$(echo "$REMOTE_TAG" | awk '{print $1}')
+          REMOTE_TAGS=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}")
+          if [[ -n "$REMOTE_TAGS" ]]; then
+            # Prefer peeled ref (^{}) to get commit SHA for annotated tags
+            REMOTE_TAG_SHA=$(echo "$REMOTE_TAGS" | grep '\^{}' | awk '{print $1}')
+            if [[ -z "$REMOTE_TAG_SHA" ]]; then
+              # Lightweight tag — direct ref is already the commit SHA
+              REMOTE_TAG_SHA=$(echo "$REMOTE_TAGS" | awk 'NR==1{print $1}')
+            fi
             if [[ "$REMOTE_TAG_SHA" != "$GITHUB_SHA" ]]; then
               echo "Error: Remote tag $TAG points to $REMOTE_TAG_SHA but current commit is $GITHUB_SHA"
               exit 1
