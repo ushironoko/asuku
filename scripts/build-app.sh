@@ -24,6 +24,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --version)
+            if [[ -z "${2:-}" ]]; then
+                echo "Error: --version requires a value (e.g., --version 1.0.0)"
+                exit 1
+            fi
             VERSION="$2"
             shift 2
             ;;
