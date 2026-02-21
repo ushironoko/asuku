@@ -19,17 +19,18 @@ Claude Code がツール（Bash, Write, Edit 等）の実行許可を求める�
 ## 動作要件
 
 - macOS 14.0 (Sonoma) 以降
-- Swift 6.0+
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) インストール済み
 
 ## はじめ方
 
-### 1. ビルドして起動
+### 1. インストール
 
 ```bash
-scripts/build-app.sh
-open .build/asuku.app
+brew tap ushironoko/tap
+brew install --no-quarantine --cask asuku
 ```
+
+> **Note:** `--no-quarantine` はアプリが ad-hoc 署名（Apple公証なし）のため必要です。付けないと macOS Gatekeeper にブロックされる場合があります。
 
 ### 2. Hook をインストール
 
@@ -124,6 +125,19 @@ docker compose -f docker/docker-compose.yml down
 
 **ポート競合**
 - ポート 8945 が使用中の場合、Settings で **Webhook Port** を変更し、Webhook Server を再起動
+
+## ソースからビルド
+
+```bash
+# ビルドして起動
+scripts/build-app.sh
+open .build/asuku.app
+
+# リリースビルド（Universal Binary）
+scripts/build-app.sh --release --universal --version 0.1.0
+```
+
+Swift 6.0+ が必要です。
 
 ## 開発
 
