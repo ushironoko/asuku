@@ -65,12 +65,23 @@ jobs:
         run: |
           TAG="v${{ steps.version.outputs.version }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists locally, skipping tag creation"
+            LOCAL_TAG_SHA=$(git rev-parse "$TAG^{}")
+            if [[ "$LOCAL_TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "Error: Local tag $TAG points to $LOCAL_TAG_SHA but current commit is $GITHUB_SHA"
+              exit 1
+            fi
+            echo "Tag $TAG already exists locally and points to current commit, skipping tag creation"
           else
             git tag "$TAG"
           fi
-          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
-            echo "Tag $TAG already exists on remote, skipping push"
+          REMOTE_TAG=$(git ls-remote --tags origin "$TAG")
+          if echo "$REMOTE_TAG" | grep -q "$TAG"; then
+            REMOTE_TAG_SHA=$(echo "$REMOTE_TAG" | awk '{print $1}')
+            if [[ "$REMOTE_TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "Error: Remote tag $TAG points to $REMOTE_TAG_SHA but current commit is $GITHUB_SHA"
+              exit 1
+            fi
+            echo "Tag $TAG already exists on remote and points to current commit, skipping push"
           else
             git push origin "$TAG"
           fi
