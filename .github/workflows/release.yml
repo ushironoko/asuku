@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., 0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      HAS_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd # v1
+        with:
+          xcode-version: "16.2"
+
+      - name: Resolve and validate version
+        id: version
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            echo "Error: no version provided and not triggered by a tag push"
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: version '$VERSION' does not match semver format (e.g., 0.1.0)"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build universal binary
+        run: scripts/build-app.sh --release --universal --version "${{ steps.version.outputs.version }}"
+
+      - name: Create zip archive
+        run: |
+          cd .build
+          zip -r -y "asuku-${{ steps.version.outputs.version }}.zip" asuku.app
+
+      - name: Calculate SHA256
+        run: |
+          shasum -a 256 ".build/asuku-${{ steps.version.outputs.version }}.zip" > ".build/asuku-${{ steps.version.outputs.version }}.zip.sha256"
+
+      - name: Create and push tag
+        if: ${{ github.ref_type != 'tag' }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            LOCAL_TAG_SHA=$(git rev-parse "$TAG^{}")
+            if [[ "$LOCAL_TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "Error: Local tag $TAG points to $LOCAL_TAG_SHA but current commit is $GITHUB_SHA"
+              exit 1
+            fi
+            echo "Tag $TAG already exists locally and points to current commit, skipping tag creation"
+          else
+            git tag "$TAG"
+          fi
+          REMOTE_TAGS=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}")
+          if [[ -n "$REMOTE_TAGS" ]]; then
+            # Prefer peeled ref (^{}) to get commit SHA for annotated tags
+            REMOTE_TAG_SHA=$(echo "$REMOTE_TAGS" | grep '\^{}' | awk '{print $1}')
+            if [[ -z "$REMOTE_TAG_SHA" ]]; then
+              # Lightweight tag — direct ref is already the commit SHA
+              REMOTE_TAG_SHA=$(echo "$REMOTE_TAGS" | awk 'NR==1{print $1}')
+            fi
+            if [[ "$REMOTE_TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "Error: Remote tag $TAG points to $REMOTE_TAG_SHA but current commit is $GITHUB_SHA"
+              exit 1
+            fi
+            echo "Tag $TAG already exists on remote and points to current commit, skipping push"
+          else
+            git push origin "$TAG"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            .build/asuku-${{ steps.version.outputs.version }}.zip
+            .build/asuku-${{ steps.version.outputs.version }}.zip.sha256
+
+      - name: Update Homebrew Cask
+        if: ${{ env.HAS_TAP_TOKEN == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256=$(cat ".build/asuku-${VERSION}.zip.sha256" | awk '{print $1}')
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/ushironoko/homebrew-tap.git" /tmp/tap
+          cd /tmp/tap
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/asuku.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA256}\"/" Casks/asuku.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/asuku.rb
+          if ! git diff --quiet --cached -- Casks/asuku.rb; then
+            git commit -m "Update asuku to ${VERSION}"
+            git push
+          else
+            echo "No changes to Casks/asuku.rb, skipping commit"
+          fi

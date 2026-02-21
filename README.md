@@ -19,17 +19,18 @@ When Claude Code needs permission to run a tool (Bash, Write, Edit, etc.), asuku
 ## Requirements
 
 - macOS 14.0 (Sonoma) or later
-- Swift 6.0+
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 
 ## Getting Started
 
-### 1. Build and launch
+### 1. Install
 
 ```bash
-scripts/build-app.sh
-open .build/asuku.app
+brew tap ushironoko/tap
+brew install --no-quarantine --cask asuku
 ```
+
+> **Note:** `--no-quarantine` is needed because the app is ad-hoc signed (not notarized by Apple). Without it, macOS Gatekeeper may block the app.
 
 ### 2. Install the hook
 
@@ -124,6 +125,19 @@ docker compose -f docker/docker-compose.yml down
 
 **Port conflict**
 - If port 8945 is in use, change the **Webhook Port** in Settings and restart the webhook server
+
+## Building from source
+
+```bash
+# Build and launch
+scripts/build-app.sh
+open .build/asuku.app
+
+# Release build (Universal Binary)
+scripts/build-app.sh --release --universal --version 0.1.0
+```
+
+Requires Swift 6.0+.
 
 ## Development
 
