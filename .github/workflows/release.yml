@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -25,17 +28,22 @@ jobs:
         with:
           xcode-version: "16.2"
 
-      - name: Validate version format
+      - name: Resolve and validate version
+        id: version
         run: |
-          VERSION="${{ inputs.version }}"
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            echo "Error: no version provided and not triggered by a tag push"
+            exit 1
+          fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Error: version '$VERSION' does not match semver format (e.g., 0.1.0)"
             exit 1
           fi
-
-      - name: Set version output
-        id: version
-        run: echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Run tests
         run: swift test
@@ -53,9 +61,19 @@ jobs:
           shasum -a 256 ".build/asuku-${{ steps.version.outputs.version }}.zip" > ".build/asuku-${{ steps.version.outputs.version }}.zip.sha256"
 
       - name: Create and push tag
+        if: ${{ github.ref_type != 'tag' }}
         run: |
-          git tag "v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+          TAG="v${{ steps.version.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally, skipping tag creation"
+          else
+            git tag "$TAG"
+          fi
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "Tag $TAG already exists on remote, skipping push"
+          else
+            git push origin "$TAG"
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
