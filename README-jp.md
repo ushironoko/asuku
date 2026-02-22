@@ -88,9 +88,12 @@ Cloudflare Tunnel を設定して、ntfy からの webhook コールバックを
 
 ### Docker セットアップ（代替）
 
-ソースからビルドした場合は、同梱の Docker スクリプトも使えます：
+同梱の Docker スクリプトで cloudflared（とオプションでセルフホスト ntfy）を起動することもできます：
 
 ```bash
+git clone https://github.com/ushironoko/asuku.git
+cd asuku
+
 # ntfy.sh 公開サーバーを使う場合（最も簡単）
 ./docker/start.sh
 

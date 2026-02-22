@@ -88,9 +88,12 @@ That's it. The next permission request will appear on both your Mac and iPhone.
 
 ### Docker setup (alternative)
 
-If you built from source, you can use the included Docker scripts instead:
+You can also use the included Docker scripts to run cloudflared (and optionally a self-hosted ntfy server):
 
 ```bash
+git clone https://github.com/ushironoko/asuku.git
+cd asuku
+
 # Using ntfy.sh public server (simplest)
 ./docker/start.sh
 
