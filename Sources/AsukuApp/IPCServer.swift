@@ -1,3 +1,4 @@
+import AsukuAppCore
 import AsukuShared
 import Foundation
 import Network
@@ -76,6 +77,9 @@ final class IPCServer: @unchecked Sendable {
     /// Called when a hook disconnects (with the requestId if known)
     var onDisconnect: (@Sendable (String?) -> Void)?
 
+    /// Called when the listener state changes (ready, failed, etc.)
+    var onStateChange: (@Sendable (ServerState) -> Void)?
+
     init(socketPath: String) {
         self.socketPath = socketPath
     }
@@ -97,8 +101,10 @@ final class IPCServer: @unchecked Sendable {
             case .ready:
                 print("[IPCServer] Listening on \(self?.socketPath ?? "unknown")")
                 try? SocketPath.setSocketPermissions(self?.socketPath ?? "")
+                self?.onStateChange?(.running)
             case .failed(let error):
                 print("[IPCServer] Listener failed: \(error)")
+                self?.onStateChange?(.failed(error.localizedDescription))
                 self?.listener?.cancel()
             default:
                 break

@@ -1,11 +1,14 @@
+import AsukuAppCore
 import AsukuShared
 import SwiftUI
 
 struct SettingsView: View {
-    let appState: AppState
+    @Bindable var appState: AppState
+    let dispatch: @MainActor (AppAction) -> Void
     @State private var launchAtLogin = false
     @State private var hookInstalled = false
     @State private var ntfySetupExpanded = false
+    @State private var webhookPortText = ""
 
     var body: some View {
         Form {
@@ -42,84 +45,89 @@ struct SettingsView: View {
             }
 
             Section("iPhone Notifications (ntfy)") {
-                Toggle("Enable ntfy notifications", isOn: Binding(
-                    get: { appState.ntfyConfig.isEnabled },
-                    set: { newValue in
-                        appState.ntfyConfig.isEnabled = newValue
-                        appState.ntfyConfigChanged()
+                Toggle("Enable ntfy notifications", isOn: $appState.ntfyConfig.isEnabled)
+                    .onChange(of: appState.ntfyConfig.isEnabled) { _, _ in
+                        appState.updateNtfyConfig(appState.ntfyConfig)
+                        dispatch(.ntfyConfigChanged)
                     }
-                ))
 
                 if appState.ntfyConfig.isEnabled {
                     HStack {
                         Text("Topic")
                         Spacer()
-                        TextField("asuku-xxxx", text: Binding(
-                            get: { appState.ntfyConfig.topic },
-                            set: { appState.ntfyConfig.topic = $0 }
-                        ))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 220)
-                        .multilineTextAlignment(.trailing)
+                        TextField("asuku-xxxx", text: $appState.ntfyConfig.topic)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 220)
+                            .multilineTextAlignment(.trailing)
+                            .onChange(of: appState.ntfyConfig.topic) { _, _ in
+                                appState.updateNtfyConfig(appState.ntfyConfig)
+                            }
                     }
 
                     HStack {
                         Text("Server URL")
                         Spacer()
-                        TextField("https://ntfy.sh", text: Binding(
-                            get: { appState.ntfyConfig.serverURL },
-                            set: { appState.ntfyConfig.serverURL = $0 }
-                        ))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 220)
-                        .multilineTextAlignment(.trailing)
+                        TextField("https://ntfy.sh", text: $appState.ntfyConfig.serverURL)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 220)
+                            .multilineTextAlignment(.trailing)
+                            .onChange(of: appState.ntfyConfig.serverURL) { _, _ in
+                                appState.updateNtfyConfig(appState.ntfyConfig)
+                            }
                     }
 
                     HStack {
                         Text("Webhook URL")
                         Spacer()
-                        TextField("https://xxxx.trycloudflare.com", text: Binding(
-                            get: { appState.ntfyConfig.webhookBaseURL },
-                            set: { appState.ntfyConfig.webhookBaseURL = $0 }
-                        ))
+                        TextField(
+                            "https://xxxx.trycloudflare.com",
+                            text: $appState.ntfyConfig.webhookBaseURL
+                        )
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 220)
                         .multilineTextAlignment(.trailing)
+                        .onChange(of: appState.ntfyConfig.webhookBaseURL) { _, _ in
+                            appState.updateNtfyConfig(appState.ntfyConfig)
+                        }
                     }
 
                     HStack {
                         Text("Webhook Port")
                         Spacer()
-                        TextField("8945", text: Binding(
-                            get: { String(appState.ntfyConfig.webhookPort) },
-                            set: { newValue in
+                        TextField("8945", text: $webhookPortText)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 80)
+                            .multilineTextAlignment(.trailing)
+                            .onChange(of: webhookPortText) { _, newValue in
                                 if let port = UInt16(newValue) {
                                     appState.ntfyConfig.webhookPort = port
+                                    appState.updateNtfyConfig(appState.ntfyConfig)
                                 }
                             }
-                        ))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 80)
-                        .multilineTextAlignment(.trailing)
                     }
 
                     HStack {
                         Text("Webhook Server")
                         Spacer()
                         Circle()
-                            .fill(appState.isWebhookServerRunning ? Color.green : Color.red)
+                            .fill(
+                                appState.webhookServerState.isRunning
+                                    ? Color.green : Color.red
+                            )
                             .frame(width: 8, height: 8)
-                        Text(appState.isWebhookServerRunning ? "Running" : "Stopped")
+                        Text(
+                            appState.webhookServerState.isRunning ? "Running" : "Stopped"
+                        )
                     }
 
-                    if let error = appState.webhookServerError {
+                    if let error = appState.webhookServerState.errorMessage {
                         Text(error)
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
 
                     Button("Restart Webhook Server") {
-                        appState.ntfyConfigChanged()
+                        dispatch(.ntfyConfigChanged)
                     }
                     .disabled(!appState.ntfyConfig.isEnabled)
 
@@ -178,9 +186,15 @@ struct SettingsView: View {
                     Text("Status")
                     Spacer()
                     Circle()
-                        .fill(appState.isServerRunning ? Color.green : Color.red)
+                        .fill(appState.ipcServerState.isRunning ? Color.green : Color.red)
                         .frame(width: 8, height: 8)
-                    Text(appState.isServerRunning ? "Running" : "Stopped")
+                    Text(appState.ipcServerState.isRunning ? "Running" : "Stopped")
+                }
+
+                if let error = appState.ipcServerState.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
 
                 HStack {
@@ -219,6 +233,7 @@ struct SettingsView: View {
         .onAppear {
             launchAtLogin = LaunchAtLogin.isEnabled
             hookInstalled = HookInstaller.isInstalled()
+            webhookPortText = String(appState.ntfyConfig.webhookPort)
         }
     }
 }
