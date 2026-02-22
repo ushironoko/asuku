@@ -68,21 +68,9 @@ Optionally receive permission requests on your iPhone and respond remotely. Usef
 2. In asuku **Settings**, enable **"iPhone Notifications (ntfy)"**
 3. On your iPhone, subscribe to the topic shown in Settings (e.g. `asuku-xxxxxxxx-...`)
 
-Then choose either Docker or manual setup below to configure Cloudflare Tunnel.
+Then set up Cloudflare Tunnel to route webhook callbacks from ntfy to your Mac.
 
-### Quick setup with Docker
-
-```bash
-# Using ntfy.sh public server (simplest)
-./docker/start.sh
-
-# Or with a self-hosted ntfy server (more private)
-./docker/start.sh --selfhosted
-```
-
-The script starts cloudflared (and optionally ntfy) in Docker, then prints the tunnel URLs. Paste them into **Settings → iPhone Notifications (ntfy)**.
-
-### Manual setup
+### Tunnel setup
 
 1. Install cloudflared:
    ```bash
@@ -96,20 +84,33 @@ The script starts cloudflared (and optionally ntfy) in Docker, then prints the t
 
 That's it. The next permission request will appear on both your Mac and iPhone.
 
-> **Note:** Quick Tunnel URLs change every time cloudflared restarts. For a permanent URL, use a Named Tunnel with `--token`:
-> ```bash
-> ./docker/start.sh --token <CLOUDFLARE_TUNNEL_TOKEN>
-> ```
-> Obtain a token from the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/).
+> **Note:** Quick Tunnel URLs change every time cloudflared restarts. For a permanent URL, use a [Named Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) with a token from the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/).
+
+### Docker setup (alternative)
+
+If you built from source, you can use the included Docker scripts instead:
+
+```bash
+# Using ntfy.sh public server (simplest)
+./docker/start.sh
+
+# Or with a self-hosted ntfy server (more private)
+./docker/start.sh --selfhosted
+
+# Named Tunnel (permanent URL)
+./docker/start.sh --token <CLOUDFLARE_TUNNEL_TOKEN>
+```
+
+The script starts cloudflared (and optionally ntfy) in Docker, then prints the tunnel URLs. Paste them into **Settings → iPhone Notifications (ntfy)**.
 
 ### Stopping
 
 ```bash
+# If using cloudflared directly
+# Stop the process (Ctrl+C)
+
 # If using Docker
 docker compose -f docker/docker-compose.yml down
-
-# If manual
-# Just stop the cloudflared process (Ctrl+C)
 ```
 
 ## Troubleshooting

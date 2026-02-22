@@ -68,21 +68,9 @@ Claude Code をいつも通り起動するだけです。ツール実行の許�
 2. asuku の **Settings** で **"iPhone Notifications (ntfy)"** を有効化
 3. iPhone の ntfy アプリで Settings に表示されたトピック（例: `asuku-xxxxxxxx-...`）を購読
 
-以下の Docker または手動セットアップで Cloudflare Tunnel を設定してください。
+Cloudflare Tunnel を設定して、ntfy からの webhook コールバックを Mac にルーティングします。
 
-### Docker で簡単セットアップ
-
-```bash
-# ntfy.sh 公開サーバーを使う場合（最も簡単）
-./docker/start.sh
-
-# セルフホスト ntfy を使う場合（よりプライベート）
-./docker/start.sh --selfhosted
-```
-
-スクリプトが cloudflared（とオプションで ntfy）を Docker で起動し、トンネル URL を表示します。表示された URL を **Settings → iPhone Notifications (ntfy)** に貼り付けてください。
-
-### 手動セットアップ
+### トンネルのセットアップ
 
 1. cloudflared をインストール：
    ```bash
@@ -96,20 +84,33 @@ Claude Code をいつも通り起動するだけです。ツール実行の許�
 
 これで次の許可リクエストから Mac と iPhone の両方に通知が届きます。
 
-> **Note:** Quick Tunnel の URL は cloudflared を再起動するたびに変わります。恒久的な URL が必要な場合は `--token` で Named Tunnel を使用：
-> ```bash
-> ./docker/start.sh --token <CLOUDFLARE_TUNNEL_TOKEN>
-> ```
-> トークンは [Cloudflare Zero Trust ダッシュボード](https://one.dash.cloudflare.com/)で取得できます。
+> **Note:** Quick Tunnel の URL は cloudflared を再起動するたびに変わります。恒久的な URL が必要な場合は [Named Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) を使用してください。トークンは [Cloudflare Zero Trust ダッシュボード](https://one.dash.cloudflare.com/)で取得できます。
+
+### Docker セットアップ（代替）
+
+ソースからビルドした場合は、同梱の Docker スクリプトも使えます：
+
+```bash
+# ntfy.sh 公開サーバーを使う場合（最も簡単）
+./docker/start.sh
+
+# セルフホスト ntfy を使う場合（よりプライベート）
+./docker/start.sh --selfhosted
+
+# Named Tunnel（恒久的な URL）
+./docker/start.sh --token <CLOUDFLARE_TUNNEL_TOKEN>
+```
+
+スクリプトが cloudflared（とオプションで ntfy）を Docker で起動し、トンネル URL を表示します。表示された URL を **Settings → iPhone Notifications (ntfy)** に貼り付けてください。
 
 ### 停止
 
 ```bash
+# cloudflared を直接使っている場合
+# プロセスを停止するだけ (Ctrl+C)
+
 # Docker の場合
 docker compose -f docker/docker-compose.yml down
-
-# 手動の場合
-# cloudflared プロセスを停止するだけ (Ctrl+C)
 ```
 
 ## トラブルシューティング
