@@ -1,4 +1,5 @@
 import Foundation
+import InlineSnapshotTesting
 import Testing
 
 @testable import AsukuShared
@@ -135,6 +136,153 @@ struct HandlerTests {
         #expect(decoded.notification_type == "permission_prompt")
         #expect(decoded.message == "Permission needed")
     }
+
+    @Test("Notification with nil optional fields")
+    func parseNotificationNilFields() throws {
+        let json = """
+            {
+                "session_id": "sess-2",
+                "hook_event_name": "Notification"
+            }
+            """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(NotificationInputTestModel.self, from: data)
+
+        #expect(decoded.session_id == "sess-2")
+        #expect(decoded.notification_type == nil)
+        #expect(decoded.message == nil)
+        #expect(decoded.title == nil)
+    }
+
+    // MARK: - Snapshot: Hook output JSON format
+
+    @Test("snapshot allow output JSON format")
+    func snapshotAllowOutput() throws {
+        let output = HookOutputTestModel(
+            hookSpecificOutput: HookSpecificOutputTestModel(
+                hookEventName: "PermissionRequest",
+                decision: HookDecisionTestModel(behavior: "allow", message: nil)
+            )
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: output, as: .json(encoder)) {
+            """
+            {
+              "hookSpecificOutput" : {
+                "decision" : {
+                  "behavior" : "allow"
+                },
+                "hookEventName" : "PermissionRequest"
+              }
+            }
+            """
+        }
+    }
+
+    @Test("snapshot deny output JSON format")
+    func snapshotDenyOutput() throws {
+        let output = HookOutputTestModel(
+            hookSpecificOutput: HookSpecificOutputTestModel(
+                hookEventName: "PermissionRequest",
+                decision: HookDecisionTestModel(
+                    behavior: "deny",
+                    message: "User denied via asuku notification"
+                )
+            )
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: output, as: .json(encoder)) {
+            """
+            {
+              "hookSpecificOutput" : {
+                "decision" : {
+                  "behavior" : "deny",
+                  "message" : "User denied via asuku notification"
+                },
+                "hookEventName" : "PermissionRequest"
+              }
+            }
+            """
+        }
+    }
+
+    // MARK: - Snapshot: PermissionRequest input parsed structure
+
+    @Test("snapshot parsed PermissionRequest dump")
+    func snapshotParsedInput() throws {
+        let json = """
+            {
+                "session_id": "abc123",
+                "hook_event_name": "PermissionRequest",
+                "tool_name": "Bash",
+                "tool_input": { "command": "echo hello" },
+                "cwd": "/tmp"
+            }
+            """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(HookInputTestModel.self, from: data)
+
+        assertInlineSnapshot(of: decoded, as: .dump) {
+            """
+            ▿ HookInputTestModel
+              - cwd: "/tmp"
+              - hook_event_name: "PermissionRequest"
+              - permission_mode: Optional<String>.none
+              - permission_suggestions: Optional<Array<AnyCodableValue>>.none
+              - session_id: "abc123"
+              ▿ tool_input: 1 key/value pair
+                ▿ (2 elements)
+                  - key: "command"
+                  ▿ value: echo hello
+                    - string: "echo hello"
+              - tool_name: "Bash"
+              - transcript_path: Optional<String>.none
+
+            """
+        }
+    }
+
+    // MARK: - IPCClientError descriptions
+
+    @Test("IPCClientError descriptions")
+    func ipcClientErrorDescriptions() {
+        assertInlineSnapshot(
+            of: String(describing: IPCClientErrorTestModel.connectionFailed("refused")), as: .lines
+        ) {
+            """
+            connectionFailed("refused")
+            """
+        }
+        assertInlineSnapshot(
+            of: String(describing: IPCClientErrorTestModel.timeout), as: .lines
+        ) {
+            """
+            timeout
+            """
+        }
+        assertInlineSnapshot(
+            of: String(describing: IPCClientErrorTestModel.connectionClosed), as: .lines
+        ) {
+            """
+            connectionClosed
+            """
+        }
+    }
+
+    // MARK: - PermissionRequestError description
+
+    @Test("PermissionRequestError description")
+    func permissionRequestErrorDescription() {
+        let error = PermissionRequestErrorTestModel.requestIdMismatch(
+            expected: "req-1", got: "req-2")
+        #expect(
+            String(describing: error)
+                == "requestIdMismatch(expected: \"req-1\", got: \"req-2\")")
+    }
 }
 
 // MARK: - Test Models (mirror of actual types without importing asuku-hook target)
@@ -184,4 +332,15 @@ private struct NotificationInputTestModel: Codable {
     let notification_type: String?
     let message: String?
     let title: String?
+}
+
+private enum IPCClientErrorTestModel: Error {
+    case connectionFailed(String)
+    case timeout
+    case connectionClosed
+    case invalidResponse
+}
+
+private enum PermissionRequestErrorTestModel: Error {
+    case requestIdMismatch(expected: String, got: String)
 }

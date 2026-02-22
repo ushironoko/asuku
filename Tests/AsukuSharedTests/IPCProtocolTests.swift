@@ -1,4 +1,5 @@
 import Foundation
+import InlineSnapshotTesting
 import Testing
 
 @testable import AsukuShared
@@ -175,6 +176,45 @@ struct IPCProtocolTests {
         if case .null = decoded["null"] {} else { Issue.record("Expected null") }
     }
 
+    @Test("AnyCodableValue description for all types")
+    func anyCodableDescription() {
+        #expect(AnyCodableValue.string("hello").description == "hello")
+        #expect(AnyCodableValue.int(42).description == "42")
+        #expect(AnyCodableValue.double(3.14).description == "3.14")
+        #expect(AnyCodableValue.bool(true).description == "true")
+        #expect(AnyCodableValue.bool(false).description == "false")
+        #expect(AnyCodableValue.null.description == "null")
+    }
+
+    @Test("AnyCodableValue stringValue returns nil for non-string")
+    func anyCodableStringValueNil() {
+        #expect(AnyCodableValue.int(42).stringValue == nil)
+        #expect(AnyCodableValue.bool(true).stringValue == nil)
+        #expect(AnyCodableValue.null.stringValue == nil)
+    }
+
+    @Test("AnyCodableValue dictionaryValue returns nil for non-dictionary")
+    func anyCodableDictionaryValueNil() {
+        #expect(AnyCodableValue.string("hello").dictionaryValue == nil)
+        #expect(AnyCodableValue.int(42).dictionaryValue == nil)
+        #expect(AnyCodableValue.null.dictionaryValue == nil)
+    }
+
+    @Test("AnyCodableValue dictionaryValue returns dict for dictionary")
+    func anyCodableDictionaryValue() {
+        let value = AnyCodableValue.dictionary(["key": .string("val")])
+        let dict = value.dictionaryValue
+        #expect(dict != nil)
+        #expect(dict?["key"]?.stringValue == "val")
+    }
+
+    @Test("AnyCodableValue array description")
+    func anyCodableArrayDescription() {
+        let arr = AnyCodableValue.array([.string("a"), .int(1)])
+        #expect(arr.description.contains("a"))
+        #expect(arr.description.contains("1"))
+    }
+
     // MARK: - Protocol Version
 
     @Test("Protocol version is 1")
@@ -236,5 +276,236 @@ struct IPCProtocolTests {
         let input = "ls -la /tmp/project"
         let sanitized = InputSanitizer.sanitize(input)
         #expect(sanitized == input)
+    }
+
+    @Test("Sanitizer masks SECRET= pattern")
+    func sanitizeSecretPattern() {
+        let input = "SECRET=hidden_value script.sh"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("hidden_value"))
+        #expect(sanitized.contains("SECRET=***"))
+    }
+
+    @Test("Sanitizer masks PASSWORD= pattern")
+    func sanitizePasswordPattern() {
+        let input = "PASSWORD=my_pass123 login"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("my_pass123"))
+        #expect(sanitized.contains("PASSWORD=***"))
+    }
+
+    @Test("Sanitizer masks PRIVATE_KEY= pattern")
+    func sanitizePrivateKeyPattern() {
+        let input = "PRIVATE_KEY=pk_live_abcdef setup"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("pk_live_abcdef"))
+        #expect(sanitized.contains("PRIVATE_KEY=***"))
+    }
+
+    @Test("Sanitizer masks AWS_SECRET pattern")
+    func sanitizeAwsSecretPattern() {
+        let input = "AWS_SECRET=wJalrXUtnFEMI deploy"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("wJalrXUtnFEMI"))
+    }
+
+    @Test("Sanitizer masks GITHUB_TOKEN pattern")
+    func sanitizeGithubTokenPattern() {
+        let input = "GITHUB_TOKEN=ghp_xxxxxxxxxxxx push"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("ghp_xxxxxxxxxxxx"))
+    }
+
+    @Test("Sanitizer masks NPM_TOKEN pattern")
+    func sanitizeNpmTokenPattern() {
+        let input = "NPM_TOKEN=npm_xxxxxxxxxxxx publish"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("npm_xxxxxxxxxxxx"))
+    }
+
+    @Test("Sanitizer masks Basic auth pattern")
+    func sanitizeBasicAuthPattern() {
+        let input = "Authorization: Basic dXNlcjpwYXNz"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(sanitized.contains("***"))
+    }
+
+    @Test("Sanitizer case insensitive matching")
+    func sanitizeCaseInsensitive() {
+        let input = "token=secret_value run"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("secret_value"))
+    }
+
+    @Test("sanitizeForNotification with short string returns unchanged")
+    func sanitizeForNotificationShort() {
+        let input = "hello world"
+        let sanitized = InputSanitizer.sanitizeForNotification(input)
+        #expect(sanitized == input)
+    }
+
+    @Test("sanitizeForNotification custom maxLength")
+    func sanitizeForNotificationCustomLength() {
+        let input = String(repeating: "x", count: 100)
+        let sanitized = InputSanitizer.sanitizeForNotification(input, maxLength: 50)
+        #expect(sanitized.count <= 53)
+        #expect(sanitized.hasSuffix("..."))
+    }
+
+    @Test("Sanitizer stops at delimiter characters")
+    func sanitizeStopsAtDelimiters() {
+        // Value stops at whitespace
+        let input1 = "TOKEN=secret123 rest"
+        let sanitized1 = InputSanitizer.sanitize(input1)
+        #expect(sanitized1.contains("TOKEN=***"))
+        #expect(sanitized1.contains("rest"))
+
+        // Value stops at quote
+        let input2 = "TOKEN=secret123\" other"
+        let sanitized2 = InputSanitizer.sanitize(input2)
+        #expect(sanitized2.contains("***"))
+
+        // Value stops at comma
+        let input3 = "TOKEN=secret123,other"
+        let sanitized3 = InputSanitizer.sanitize(input3)
+        #expect(sanitized3.contains("***"))
+    }
+
+    // MARK: - Snapshot: JSON format of IPC messages
+
+    @Test("snapshot PermissionRequest JSON format")
+    func snapshotPermissionRequestJSON() throws {
+        let event = PermissionRequestEvent(
+            requestId: "req-001",
+            sessionId: "sess-001",
+            toolName: "Bash",
+            toolInput: ["command": .string("echo hello")],
+            cwd: "/home/user",
+            timestamp: Date(timeIntervalSince1970: 1700000000)
+        )
+        let message = IPCMessage(payload: .permissionRequest(event))
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: message, as: .json(encoder)) {
+            """
+            {
+              "payload" : {
+                "data" : {
+                  "cwd" : "\\/home\\/user",
+                  "requestId" : "req-001",
+                  "sessionId" : "sess-001",
+                  "timestamp" : "2023-11-14T22:13:20Z",
+                  "toolInput" : {
+                    "command" : "echo hello"
+                  },
+                  "toolName" : "Bash"
+                },
+                "type" : "permissionRequest"
+              },
+              "protocolVersion" : 1
+            }
+            """
+        }
+    }
+
+    @Test("snapshot Notification JSON format")
+    func snapshotNotificationJSON() throws {
+        let event = NotificationEvent(
+            sessionId: "sess-002",
+            title: "Task Complete",
+            body: "Build succeeded",
+            timestamp: Date(timeIntervalSince1970: 1700000000)
+        )
+        let message = IPCMessage(payload: .notification(event))
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: message, as: .json(encoder)) {
+            """
+            {
+              "payload" : {
+                "data" : {
+                  "body" : "Build succeeded",
+                  "sessionId" : "sess-002",
+                  "timestamp" : "2023-11-14T22:13:20Z",
+                  "title" : "Task Complete"
+                },
+                "type" : "notification"
+              },
+              "protocolVersion" : 1
+            }
+            """
+        }
+    }
+
+    @Test("snapshot Heartbeat JSON format")
+    func snapshotHeartbeatJSON() throws {
+        let message = IPCMessage(payload: .heartbeat)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: message, as: .json(encoder)) {
+            """
+            {
+              "payload" : {
+                "type" : "heartbeat"
+              },
+              "protocolVersion" : 1
+            }
+            """
+        }
+    }
+
+    @Test("snapshot IPCResponse JSON format")
+    func snapshotResponseJSON() throws {
+        let response = IPCResponse(requestId: "req-001", decision: .allow)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: response, as: .json(encoder)) {
+            """
+            {
+              "decision" : "allow",
+              "protocolVersion" : 1,
+              "requestId" : "req-001"
+            }
+            """
+        }
+    }
+
+    @Test("snapshot IPCError JSON format")
+    func snapshotErrorJSON() throws {
+        let error = IPCError(error: "Protocol version mismatch")
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: error, as: .json(encoder)) {
+            """
+            {
+              "error" : "Protocol version mismatch",
+              "protocolVersion" : 1
+            }
+            """
+        }
+    }
+
+    // MARK: - SocketPathError
+
+    @Test("SocketPathError.pathTooLong description")
+    func socketPathErrorPathTooLong() {
+        let longPath = "/very/long/path/that/exceeds/limit"
+        let error = SocketPathError.pathTooLong(longPath)
+        #expect(error.description.contains("104 character limit"))
+        #expect(error.description.contains(longPath))
+    }
+
+    @Test("SocketPathError.notADirectory description")
+    func socketPathErrorNotADirectory() {
+        let error = SocketPathError.notADirectory("/some/file")
+        #expect(error.description.contains("Expected directory"))
+        #expect(error.description.contains("/some/file"))
     }
 }
