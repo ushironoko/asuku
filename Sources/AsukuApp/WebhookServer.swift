@@ -9,6 +9,7 @@ final class WebhookServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "asuku.webhook.server")
     private let port: UInt16
     private let secret: String
+    private let connectionTimeout: TimeInterval
 
     /// Called when a webhook response arrives: (requestId, decision)
     var onWebhookResponse: (@Sendable (String, PermissionDecision) -> Void)?
@@ -16,9 +17,10 @@ final class WebhookServer: @unchecked Sendable {
     /// Called when the listener state changes asynchronously
     var onStateChange: (@Sendable (ServerState) -> Void)?
 
-    init(port: UInt16, secret: String) {
+    init(port: UInt16, secret: String, connectionTimeout: TimeInterval = 30) {
         self.port = port
         self.secret = secret
+        self.connectionTimeout = connectionTimeout
     }
 
     func start() throws {
@@ -62,13 +64,27 @@ final class WebhookServer: @unchecked Sendable {
 
     // MARK: - Connection handling
 
+    /// Sendable wrapper for DispatchWorkItem (safe: all access is on the same serial queue).
+    private final class TimeoutHandle: @unchecked Sendable {
+        let workItem: DispatchWorkItem
+        init(_ workItem: DispatchWorkItem) { self.workItem = workItem }
+        func cancel() { workItem.cancel() }
+    }
+
     private func handleConnection(_ connection: NWConnection) {
+        let workItem = DispatchWorkItem { [weak connection] in
+            print("[WebhookServer] Connection timed out, closing")
+            connection?.cancel()
+        }
+        queue.asyncAfter(deadline: .now() + connectionTimeout, execute: workItem)
+        let timeout = TimeoutHandle(workItem)
+
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
-                self?.receiveHTTPRequest(connection: connection)
+                self?.receiveHTTPRequest(connection: connection, timeout: timeout)
             case .failed, .cancelled:
-                break
+                timeout.cancel()
             default:
                 break
             }
@@ -77,7 +93,7 @@ final class WebhookServer: @unchecked Sendable {
         connection.start(queue: queue)
     }
 
-    private func receiveHTTPRequest(connection: NWConnection) {
+    private func receiveHTTPRequest(connection: NWConnection, timeout: TimeoutHandle) {
         final class BufferState: @unchecked Sendable {
             var buffer = Data()
         }
@@ -88,6 +104,7 @@ final class WebhookServer: @unchecked Sendable {
                 [weak self] content, _, isComplete, error in
                 if let error {
                     print("[WebhookServer] Receive error: \(error)")
+                    timeout.cancel()
                     connection.cancel()
                     return
                 }
@@ -100,18 +117,21 @@ final class WebhookServer: @unchecked Sendable {
                 if let requestString = String(data: state.buffer, encoding: .utf8),
                     requestString.contains("\r\n\r\n")
                 {
+                    timeout.cancel()
                     self?.processHTTPRequest(requestString, connection: connection)
                     return
                 }
 
                 // Guard against excessively large requests
                 if state.buffer.count > 4096 {
+                    timeout.cancel()
                     self?.sendHTTPResponse(
                         connection: connection, statusCode: 400, body: "Bad Request")
                     return
                 }
 
                 if isComplete {
+                    timeout.cancel()
                     self?.sendHTTPResponse(
                         connection: connection, statusCode: 400, body: "Incomplete Request")
                     return
@@ -132,8 +152,8 @@ final class WebhookServer: @unchecked Sendable {
             return
         }
 
-        // Validate authentication token
-        guard WebhookRequestParser.validateToken(request.token, expected: secret) else {
+        // Validate authentication token (prefer Authorization header, fallback to query param)
+        guard WebhookRequestParser.validateToken(request.effectiveToken, expected: secret) else {
             print("[WebhookServer] Rejected request with invalid token for \(request.requestId)")
             sendHTTPResponse(connection: connection, statusCode: 403, body: "Forbidden")
             return

@@ -508,4 +508,50 @@ struct IPCProtocolTests {
         #expect(error.description.contains("Expected directory"))
         #expect(error.description.contains("/some/file"))
     }
+
+    // MARK: - Wire Format: Frame Size Limit
+
+    @Test("Wire format rejects oversized frame length")
+    func wireFormatRejectsOversized() {
+        var lengthPrefix = (IPCWireFormat.maxFrameSize + 1).bigEndian
+        let data = Data(bytes: &lengthPrefix, count: 4) + Data(repeating: 0, count: 10)
+        #expect(IPCWireFormat.decode(data) == nil)
+    }
+
+    @Test("Wire format rejects extremely large frame length")
+    func wireFormatRejectsHugeFrame() {
+        var lengthPrefix = UInt32.max.bigEndian
+        let data = Data(bytes: &lengthPrefix, count: 4) + Data(repeating: 0, count: 10)
+        #expect(IPCWireFormat.decode(data) == nil)
+    }
+
+    @Test("Wire format accepts frame at max size")
+    func wireFormatAcceptsMaxSize() {
+        let payload = Data(repeating: 0x42, count: Int(IPCWireFormat.maxFrameSize))
+        let encoded = IPCWireFormat.encode(payload)
+        let decoded = IPCWireFormat.decode(encoded)
+        #expect(decoded != nil)
+        #expect(decoded?.payload.count == Int(IPCWireFormat.maxFrameSize))
+    }
+
+    // MARK: - Sanitizer: Multiple Occurrences
+
+    @Test("Sanitizer masks multiple occurrences of same pattern")
+    func sanitizeMultipleOccurrences() {
+        let input = "TOKEN=first_secret TOKEN=second_secret"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("first_secret"))
+        #expect(!sanitized.contains("second_secret"))
+        #expect(sanitized == "TOKEN=*** TOKEN=***")
+    }
+
+    @Test("Sanitizer masks multiple different patterns in one string")
+    func sanitizeMultipleDifferentPatterns() {
+        let input = "TOKEN=abc API_KEY=def TOKEN=ghi"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("abc"))
+        #expect(!sanitized.contains("def"))
+        #expect(!sanitized.contains("ghi"))
+        #expect(sanitized == "TOKEN=*** API_KEY=*** TOKEN=***")
+    }
 }

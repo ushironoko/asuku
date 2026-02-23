@@ -12,6 +12,21 @@ enum NtfyNotifier {
     static func sendPermissionRequest(_ request: PendingRequest, config: NtfyConfig) async {
         guard config.isEnabled else { return }
 
+        // Validate server URL scheme (HTTPS required for remote servers)
+        let serverValidation = NtfyConfig.validateServerURL(config.serverURL)
+        switch serverValidation {
+        case .insecure:
+            print(
+                "[NtfyNotifier] Refusing to send over insecure HTTP to non-localhost server: \(config.serverURL)"
+            )
+            return
+        case .invalid:
+            print("[NtfyNotifier] Invalid server URL: \(config.serverURL)")
+            return
+        case .valid, .localhost:
+            break
+        }
+
         let serverURL = config.serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: "\(serverURL)/\(config.topic)") else {
             print("[NtfyNotifier] Invalid URL: \(serverURL)/\(config.topic)")
@@ -34,21 +49,19 @@ enum NtfyNotifier {
         urlRequest.setValue("high", forHTTPHeaderField: "Priority")
         urlRequest.setValue("warning", forHTTPHeaderField: "Tags")
 
-        // Action buttons — ntfy supports HTTP actions
-        // Include webhook secret as query parameter for authentication
+        // Action buttons — ntfy supports HTTP actions with custom headers
+        // Token is sent via Authorization header (not URL query) to prevent exposure in logs
         guard let allowURL = buildWebhookURL(
-            base: webhookBase, action: "allow", requestID: request.id,
-            token: config.webhookSecret),
+            base: webhookBase, action: "allow", requestID: request.id),
             let denyURL = buildWebhookURL(
-                base: webhookBase, action: "deny", requestID: request.id,
-                token: config.webhookSecret)
+                base: webhookBase, action: "deny", requestID: request.id)
         else {
             print("[NtfyNotifier] Failed to build webhook action URLs")
             return
         }
         let actions = [
-            "http, Allow, \(allowURL), method=POST",
-            "http, Deny, \(denyURL), method=POST",
+            "http, Allow, \(allowURL), method=POST, headers.Authorization=Bearer \(config.webhookSecret)",
+            "http, Deny, \(denyURL), method=POST, headers.Authorization=Bearer \(config.webhookSecret)",
         ].joined(separator: "; ")
         urlRequest.setValue(actions, forHTTPHeaderField: "Actions")
 
@@ -70,14 +83,12 @@ enum NtfyNotifier {
     }
 
     private static func buildWebhookURL(
-        base: String, action: String, requestID: String, token: String
+        base: String, action: String, requestID: String
     ) -> String? {
-        guard var components = URLComponents(string: "\(base)/webhook/\(action)/\(requestID)")
-        else {
+        guard let _ = URL(string: "\(base)/webhook/\(action)/\(requestID)") else {
             return nil
         }
-        components.queryItems = [URLQueryItem(name: "token", value: token)]
-        return components.url?.absoluteString
+        return "\(base)/webhook/\(action)/\(requestID)"
     }
 
     private static func buildNotificationBody(_ request: PendingRequest) -> String {
