@@ -76,6 +76,14 @@ struct SettingsView: View {
                             }
                     }
 
+                    if NtfyConfig.validateServerURL(appState.ntfyConfig.serverURL) == .insecure {
+                        Text(
+                            "Warning: HTTP is insecure for remote servers. Use HTTPS to protect notification content."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    }
+
                     HStack {
                         Text("Webhook URL")
                         Spacer()

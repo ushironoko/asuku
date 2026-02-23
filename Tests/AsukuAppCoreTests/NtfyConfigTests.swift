@@ -129,6 +129,58 @@ struct NtfyConfigTests {
         #expect(config.webhookPort == 8945) // fallback to default
     }
 
+    // MARK: - ServerURLValidation
+
+    @Test("HTTPS URL is valid")
+    func validateHTTPS() {
+        #expect(NtfyConfig.validateServerURL("https://ntfy.sh") == .valid)
+    }
+
+    @Test("HTTPS URL with port is valid")
+    func validateHTTPSWithPort() {
+        #expect(NtfyConfig.validateServerURL("https://ntfy.example.com:8443") == .valid)
+    }
+
+    @Test("HTTP localhost is allowed")
+    func validateHTTPLocalhost() {
+        #expect(NtfyConfig.validateServerURL("http://localhost:8080") == .localhost)
+    }
+
+    @Test("HTTP 127.0.0.1 is allowed")
+    func validateHTTPLoopback() {
+        #expect(NtfyConfig.validateServerURL("http://127.0.0.1") == .localhost)
+    }
+
+    @Test("HTTP [::1] is allowed")
+    func validateHTTPIPv6Loopback() {
+        #expect(NtfyConfig.validateServerURL("http://[::1]") == .localhost)
+    }
+
+    @Test("HTTP remote server is insecure")
+    func validateHTTPRemote() {
+        #expect(NtfyConfig.validateServerURL("http://example.com") == .insecure)
+    }
+
+    @Test("HTTP remote server with path is insecure")
+    func validateHTTPRemoteWithPath() {
+        #expect(NtfyConfig.validateServerURL("http://ntfy.example.com/path") == .insecure)
+    }
+
+    @Test("FTP scheme is invalid")
+    func validateFTP() {
+        #expect(NtfyConfig.validateServerURL("ftp://ntfy.sh") == .invalid)
+    }
+
+    @Test("Empty string is invalid")
+    func validateEmpty() {
+        #expect(NtfyConfig.validateServerURL("") == .invalid)
+    }
+
+    @Test("Non-URL string is invalid")
+    func validateNonURL() {
+        #expect(NtfyConfig.validateServerURL("not-a-url") == .invalid)
+    }
+
     // MARK: - Snapshot
 
     @Test("snapshot of config dump")

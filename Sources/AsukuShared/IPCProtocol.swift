@@ -8,6 +8,9 @@ public let ipcProtocolVersion = 1
 
 /// 4-byte big-endian length prefix + JSON payload
 public enum IPCWireFormat {
+    /// Maximum allowed frame size (1 MB)
+    public static let maxFrameSize: UInt32 = 1_048_576
+
     public static func encode(_ data: Data) -> Data {
         var length = UInt32(data.count).bigEndian
         var frame = Data(bytes: &length, count: 4)
@@ -16,12 +19,13 @@ public enum IPCWireFormat {
     }
 
     /// Attempts to extract a complete frame from the buffer.
-    /// Returns (payload, bytesConsumed) or nil if insufficient data.
+    /// Returns (payload, bytesConsumed) or nil if insufficient data or oversized frame.
     public static func decode(_ buffer: Data) -> (payload: Data, bytesConsumed: Int)? {
         guard buffer.count >= 4 else { return nil }
         let length = buffer.withUnsafeBytes { ptr in
             ptr.load(as: UInt32.self).bigEndian
         }
+        guard length <= maxFrameSize else { return nil }
         let totalLength = 4 + Int(length)
         guard buffer.count >= totalLength else { return nil }
         let payload = buffer.subdata(in: 4..<totalLength)
@@ -252,21 +256,31 @@ public enum InputSanitizer {
     public static func sanitize(_ input: String) -> String {
         var result = input
         for pattern in sensitivePatterns {
-            guard let range = result.range(of: pattern, options: .caseInsensitive) else {
-                continue
-            }
-            // Find the value after the pattern (up to whitespace, quote, or end)
-            let valueStart = range.upperBound
-            var valueEnd = valueStart
-            while valueEnd < result.endIndex {
-                let char = result[valueEnd]
-                if char.isWhitespace || char == "\"" || char == "'" || char == "," || char == "}" {
-                    break
+            var searchStart = result.startIndex
+            while searchStart < result.endIndex {
+                guard
+                    let range = result.range(
+                        of: pattern, options: .caseInsensitive,
+                        range: searchStart..<result.endIndex)
+                else { break }
+                // Find the value after the pattern (up to whitespace, quote, or end)
+                let valueStart = range.upperBound
+                var valueEnd = valueStart
+                while valueEnd < result.endIndex {
+                    let char = result[valueEnd]
+                    if char.isWhitespace || char == "\"" || char == "'" || char == ","
+                        || char == "}"
+                    {
+                        break
+                    }
+                    valueEnd = result.index(after: valueEnd)
                 }
-                valueEnd = result.index(after: valueEnd)
-            }
-            if valueStart < valueEnd {
-                result.replaceSubrange(valueStart..<valueEnd, with: "***")
+                if valueStart < valueEnd {
+                    result.replaceSubrange(valueStart..<valueEnd, with: "***")
+                    searchStart = result.index(valueStart, offsetBy: 3)
+                } else {
+                    searchStart = range.upperBound
+                }
             }
         }
         return result

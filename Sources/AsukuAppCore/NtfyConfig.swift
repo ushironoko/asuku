@@ -27,6 +27,38 @@ public struct NtfyConfig: Equatable, Sendable {
     }
 }
 
+/// Result of validating a server URL scheme.
+public enum ServerURLValidation: Equatable, Sendable {
+    /// HTTPS — secure, always allowed
+    case valid
+    /// HTTP but targeting localhost — allowed (local traffic)
+    case localhost
+    /// HTTP targeting a remote host — insecure, should be rejected
+    case insecure
+    /// Not a valid URL or unsupported scheme
+    case invalid
+}
+
+extension NtfyConfig {
+    /// Validates whether the server URL uses a secure transport.
+    /// HTTP is allowed only for localhost/127.0.0.1/::1 (self-hosted ntfy).
+    public static func validateServerURL(_ urlString: String) -> ServerURLValidation {
+        guard let url = URL(string: urlString),
+            let scheme = url.scheme?.lowercased(),
+            let host = url.host?.lowercased()
+        else { return .invalid }
+
+        if scheme == "https" { return .valid }
+        if scheme == "http" {
+            if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]" {
+                return .localhost
+            }
+            return .insecure
+        }
+        return .invalid
+    }
+}
+
 /// Stateless persistence for NtfyConfig via UserDefaults.
 /// Separates data definition from side effects (disk I/O).
 public enum NtfyConfigStore {
