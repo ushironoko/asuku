@@ -29,9 +29,15 @@ jobs:
 
       - name: Verify no test code in app bundle
         run: |
+          set -euo pipefail
           BIN_PATH=$(swift build --show-bin-path)
           for binary in AsukuApp asuku-hook; do
-            if nm "$BIN_PATH/$binary" 2>/dev/null | grep -qiE "snapshot|XCTest|InlineSnapshot|swift_syntax|CustomDump"; then
+            BINARY_PATH="$BIN_PATH/$binary"
+            if [ ! -f "$BINARY_PATH" ]; then
+              echo "FAIL: Binary not found at $BINARY_PATH"
+              exit 1
+            fi
+            if nm "$BINARY_PATH" | grep -qiE "snapshot|XCTest|InlineSnapshot|swift_syntax|CustomDump"; then
               echo "FAIL: Test symbols found in $binary"
               exit 1
             fi

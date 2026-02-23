@@ -102,14 +102,15 @@ esac
 # Minimum coverage gate
 if [ -n "$MIN_COVERAGE" ]; then
     # Extract total line coverage percentage from report.
-    # TOTAL row layout: ... Lines MissedLines Cover% Branches MissedBranches Cover
-    # Line coverage % is at field $10 (NF-3).
+    # Without --show-branch-summary, the TOTAL row ends with:
+    #   ... Lines MissedLines Cover%
+    # so $NF is always the line coverage percentage.
     ACTUAL=$(xcrun llvm-cov report \
         "$TEST_BINARY" \
         --instr-profile "$PROFDATA" \
         --ignore-filename-regex="$IGNORE_REGEX" \
         | grep "^TOTAL" \
-        | awk '{print $(NF-3)}' \
+        | awk '{print $NF}' \
         | tr -d '%')
 
     echo ""
