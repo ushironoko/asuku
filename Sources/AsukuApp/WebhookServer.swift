@@ -2,12 +2,6 @@ import AsukuShared
 import Foundation
 import Network
 
-/// Webhook server state reported asynchronously via NWListener
-enum WebhookServerState: Sendable {
-    case ready
-    case failed(String)
-}
-
 /// Lightweight HTTP server for receiving ntfy webhook callbacks.
 /// Listens on 127.0.0.1 (localhost only) — cloudflared tunnels traffic from the internet.
 final class WebhookServer: @unchecked Sendable {
@@ -19,8 +13,8 @@ final class WebhookServer: @unchecked Sendable {
     /// Called when a webhook response arrives: (requestId, decision)
     var onWebhookResponse: (@Sendable (String, PermissionDecision) -> Void)?
 
-    /// Called when the listener state changes asynchronously (ready, failed)
-    var onStateChange: (@Sendable (WebhookServerState) -> Void)?
+    /// Called when the listener state changes asynchronously
+    var onStateChange: (@Sendable (ServerState) -> Void)?
 
     init(port: UInt16, secret: String) {
         self.port = port
@@ -43,7 +37,7 @@ final class WebhookServer: @unchecked Sendable {
             switch state {
             case .ready:
                 print("[WebhookServer] Listening on 127.0.0.1:\(self?.port ?? 0)")
-                self?.onStateChange?(.ready)
+                self?.onStateChange?(.running)
             case .failed(let error):
                 print("[WebhookServer] Listener failed: \(error)")
                 self?.onStateChange?(.failed(error.localizedDescription))

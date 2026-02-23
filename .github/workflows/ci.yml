@@ -19,10 +19,27 @@ jobs:
       - name: Build
         run: swift build
 
-      - name: Test
-        run: swift test
+      - name: Test with coverage
+        run: scripts/coverage.sh --min 80
 
       - name: Smoke test build-app.sh
         run: |
           scripts/build-app.sh --version 0.0.0
           codesign -v .build/asuku.app
+
+      - name: Verify no test code in app bundle
+        run: |
+          set -euo pipefail
+          BIN_PATH=$(swift build --show-bin-path)
+          for binary in AsukuApp asuku-hook; do
+            BINARY_PATH="$BIN_PATH/$binary"
+            if [ ! -f "$BINARY_PATH" ]; then
+              echo "FAIL: Binary not found at $BINARY_PATH"
+              exit 1
+            fi
+            if nm "$BINARY_PATH" | grep -qiE "snapshot|XCTest|InlineSnapshot|swift_syntax|CustomDump"; then
+              echo "FAIL: Test symbols found in $binary"
+              exit 1
+            fi
+          done
+          echo "PASS: No test symbols in production binaries"

@@ -1,19 +1,15 @@
+import AsukuAppCore
 import AsukuShared
 import Foundation
 
-/// Sends push notifications to ntfy.sh for iPhone delivery
-@MainActor
-final class NtfyNotifier {
-    private let config: NtfyConfig
-    private let session: URLSession
-
-    init(config: NtfyConfig) {
-        self.config = config
-        self.session = URLSession(configuration: .ephemeral)
-    }
+/// Stateless ntfy push notification sender.
+/// Config is passed as a parameter — no lifecycle management needed.
+enum NtfyNotifier {
+    private static let session = URLSession(configuration: .ephemeral)
 
     /// Sends a permission request notification to ntfy. Fails silently (macOS notification is primary).
-    func sendPermissionRequest(_ request: PendingRequest) async {
+    @MainActor
+    static func sendPermissionRequest(_ request: PendingRequest, config: NtfyConfig) async {
         guard config.isEnabled else { return }
 
         let serverURL = config.serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -73,7 +69,7 @@ final class NtfyNotifier {
         }
     }
 
-    private func buildWebhookURL(
+    private static func buildWebhookURL(
         base: String, action: String, requestID: String, token: String
     ) -> String? {
         guard var components = URLComponents(string: "\(base)/webhook/\(action)/\(requestID)")
@@ -84,7 +80,7 @@ final class NtfyNotifier {
         return components.url?.absoluteString
     }
 
-    private func buildNotificationBody(_ request: PendingRequest) -> String {
+    private static func buildNotificationBody(_ request: PendingRequest) -> String {
         var lines: [String] = []
 
         lines.append("Tool: \(request.event.toolName)")
