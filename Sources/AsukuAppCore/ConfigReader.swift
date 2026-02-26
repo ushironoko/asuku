@@ -14,9 +14,19 @@ public enum ConfigReader {
         let pluginsPath = (claudeDir as NSString).appendingPathComponent(
             "plugins/installed_plugins.json")
 
+        let settingsData = FileManager.default.contents(atPath: settingsPath)
+        let pluginsData = FileManager.default.contents(atPath: pluginsPath)
+
+        return parseEnabledPlugins(settingsData: settingsData, installedPluginsData: pluginsData)
+    }
+
+    /// Parses enabled plugins from raw JSON data. Exposed for testability.
+    public static func parseEnabledPlugins(
+        settingsData: Data?, installedPluginsData: Data?
+    ) -> [EnabledPlugin] {
         // Read settings.json enabledPlugins
         var enabledMap: [String: Bool] = [:]
-        if let data = FileManager.default.contents(atPath: settingsPath),
+        if let data = settingsData,
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let enabled = json["enabledPlugins"] as? [String: Bool]
         {
@@ -24,12 +34,17 @@ public enum ConfigReader {
         }
 
         // Read installed_plugins.json
+        // Real schema: each plugin value is an array of install records [[String: Any]]
         var installedMap: [String: [String: Any]] = [:]
-        if let data = FileManager.default.contents(atPath: pluginsPath),
+        if let data = installedPluginsData,
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let plugins = json["plugins"] as? [String: [String: Any]]
+            let plugins = json["plugins"] as? [String: [[String: Any]]]
         {
-            installedMap = plugins
+            for (key, records) in plugins {
+                if let first = records.first {
+                    installedMap[key] = first
+                }
+            }
         }
 
         // Merge: use all known plugin IDs from both sources
@@ -87,12 +102,12 @@ public enum ConfigReader {
                 let sessionId = json["sessionId"] as? String
             else { return nil }
 
+            let timestampMs = json["timestamp"] as? Double ?? 0
             return SessionHistoryEntry(
-                id: UUID().uuidString,
+                id: "\(sessionId)-\(Int64(timestampMs))",
                 sessionId: sessionId,
                 projectPath: json["project"] as? String ?? "",
-                timestamp: Date(
-                    timeIntervalSince1970: (json["timestamp"] as? Double ?? 0) / 1000),
+                timestamp: Date(timeIntervalSince1970: timestampMs / 1000),
                 displayText: json["display"] as? String ?? ""
             )
         }

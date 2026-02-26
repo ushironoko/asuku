@@ -387,36 +387,20 @@ struct ConfigReaderTests {
         #expect(entry.projectPath == "")
     }
 
-    // MARK: - Plugin merge logic simulation
+    // MARK: - Plugin merge logic via parseEnabledPlugins()
 
     @Test("Plugin merge: settings enabledPlugins + installed_plugins merge")
-    func pluginMergeLogic() {
-        // Simulate the merging logic from ConfigReader
-        let enabledMap: [String: Bool] = [
-            "typescript-lsp@official": true,
-            "python-lsp@official": false,
-        ]
-        let installedMap: [String: [String: Any]] = [
-            "typescript-lsp@official": ["version": "1.2.3"],
-            "rust-analyzer@community": ["version": "0.5.0"],
-        ]
-
-        var allPluginIds = Set(enabledMap.keys)
-        allPluginIds.formUnion(installedMap.keys)
-
-        let plugins = allPluginIds.sorted().map { pluginId -> EnabledPlugin in
-            let parts = pluginId.split(separator: "@", maxSplits: 1)
-            let name = parts.first.map(String.init) ?? pluginId
-            let marketplace = parts.count > 1 ? String(parts[1]) : ""
-            let isEnabled = enabledMap[pluginId] ?? false
-            let installed = installedMap[pluginId]
-            let version = installed?["version"] as? String ?? ""
-
-            return EnabledPlugin(
-                id: pluginId, name: name, marketplace: marketplace,
-                isEnabled: isEnabled, version: version
-            )
-        }
+    func pluginMergeLogic() throws {
+        let settingsJson = """
+            {"enabledPlugins":{"typescript-lsp@official":true,"python-lsp@official":false}}
+            """
+        let installedJson = """
+            {"plugins":{"typescript-lsp@official":[{"version":"1.2.3"}],"rust-analyzer@community":[{"version":"0.5.0"}]}}
+            """
+        let plugins = ConfigReader.parseEnabledPlugins(
+            settingsData: settingsJson.data(using: .utf8),
+            installedPluginsData: installedJson.data(using: .utf8)
+        )
 
         #expect(plugins.count == 3)
 
@@ -434,6 +418,66 @@ struct ConfigReaderTests {
         let ts = plugins.first { $0.id == "typescript-lsp@official" }!
         #expect(ts.isEnabled == true)
         #expect(ts.version == "1.2.3")
+    }
+
+    @Test("Regression: parseEnabledPlugins handles real installed_plugins.json array schema")
+    func pluginParseRealSchema() {
+        // Real installed_plugins.json has array-of-records per plugin
+        let installedJson = """
+            {
+              "plugins": {
+                "todo-manager@claude-plugins-official": [
+                  {"version": "2.1.0", "installedAt": "2025-01-15T10:00:00Z", "source": "marketplace"},
+                  {"version": "2.0.0", "installedAt": "2024-12-01T08:00:00Z", "source": "marketplace"}
+                ],
+                "git-helper@community": [
+                  {"version": "0.9.1", "installedAt": "2025-02-01T12:00:00Z", "source": "manual"}
+                ]
+              }
+            }
+            """
+        let settingsJson = """
+            {"enabledPlugins":{"todo-manager@claude-plugins-official":true}}
+            """
+
+        let plugins = ConfigReader.parseEnabledPlugins(
+            settingsData: settingsJson.data(using: .utf8),
+            installedPluginsData: installedJson.data(using: .utf8)
+        )
+
+        #expect(plugins.count == 2)
+
+        // todo-manager: enabled + version from first install record
+        let todo = plugins.first { $0.id == "todo-manager@claude-plugins-official" }!
+        #expect(todo.isEnabled == true)
+        #expect(todo.version == "2.1.0")
+        #expect(todo.name == "todo-manager")
+        #expect(todo.marketplace == "claude-plugins-official")
+
+        // git-helper: not in settings → not enabled, version from single record
+        let git = plugins.first { $0.id == "git-helper@community" }!
+        #expect(git.isEnabled == false)
+        #expect(git.version == "0.9.1")
+    }
+
+    @Test("parseEnabledPlugins with nil data returns empty")
+    func pluginParseNilData() {
+        let plugins = ConfigReader.parseEnabledPlugins(
+            settingsData: nil, installedPluginsData: nil
+        )
+        #expect(plugins.isEmpty)
+    }
+
+    @Test("parseEnabledPlugins with empty plugins object")
+    func pluginParseEmptyPlugins() {
+        let installedJson = """
+            {"plugins":{}}
+            """
+        let plugins = ConfigReader.parseEnabledPlugins(
+            settingsData: nil,
+            installedPluginsData: installedJson.data(using: .utf8)
+        )
+        #expect(plugins.isEmpty)
     }
 
     // MARK: - Snapshots

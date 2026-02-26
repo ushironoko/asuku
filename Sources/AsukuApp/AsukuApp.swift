@@ -6,10 +6,7 @@ struct AsukuApp: App {
     @State private var coordinator: AppCoordinator
 
     private var contextPressure: Bool {
-        guard let percent = appState.activeSessions.first?.contextUsedPercent else {
-            return false
-        }
-        return percent >= 80
+        appState.activeSessions.contains { ($0.contextUsedPercent ?? 0) >= 80 }
     }
 
     var body: some Scene {
