@@ -2,20 +2,34 @@ import AsukuShared
 import Foundation
 
 /// Represents a pending permission request awaiting user response
-struct PendingRequest: Identifiable, Sendable {
-    let id: String  // requestId
-    let event: PermissionRequestEvent
-    let responder: IPCResponder
-    let createdAt: Date
-    let timeoutSeconds: TimeInterval?
+public struct PendingRequest: Identifiable, Sendable {
+    public let id: String  // requestId
+    public let event: PermissionRequestEvent
+    public let responder: any IPCResponding
+    public let createdAt: Date
+    public let timeoutSeconds: TimeInterval?
 
-    var isExpired: Bool {
+    public init(
+        id: String,
+        event: PermissionRequestEvent,
+        responder: any IPCResponding,
+        createdAt: Date,
+        timeoutSeconds: TimeInterval?
+    ) {
+        self.id = id
+        self.event = event
+        self.responder = responder
+        self.createdAt = createdAt
+        self.timeoutSeconds = timeoutSeconds
+    }
+
+    public var isExpired: Bool {
         guard let timeoutSeconds else { return false }
         return Date().timeIntervalSince(createdAt) >= timeoutSeconds
     }
 
     /// Summary text for UI display
-    var displayTitle: String {
+    public var displayTitle: String {
         switch event.toolName {
         case "Bash":
             if let command = event.toolInput["command"]?.stringValue {
@@ -33,7 +47,7 @@ struct PendingRequest: Identifiable, Sendable {
     }
 
     /// Notification body text
-    var notificationBody: String {
+    public var notificationBody: String {
         switch event.toolName {
         case "Bash":
             if let command = event.toolInput["command"]?.stringValue {
@@ -60,30 +74,32 @@ struct PendingRequest: Identifiable, Sendable {
 }
 
 /// Actor that manages pending permission requests with timeout handling
-actor PendingRequestManager {
+public actor PendingRequestManager {
     /// Default timeout: 280 seconds (before Claude Code's 300s hook timeout)
-    static let defaultTimeoutSeconds: TimeInterval = 280
+    public static let defaultTimeoutSeconds: TimeInterval = 280
 
     private var requests: [String: PendingRequest] = [:]
     private var timeoutTasks: [String: Task<Void, Never>] = [:]
 
     /// Called when a request expires (auto-deny)
-    var onTimeout: (@Sendable (String) -> Void)?
+    public var onTimeout: (@Sendable (String) -> Void)?
+
+    public init() {}
 
     /// All currently pending requests
-    var pendingRequests: [PendingRequest] {
+    public var pendingRequests: [PendingRequest] {
         Array(requests.values).sorted { $0.createdAt < $1.createdAt }
     }
 
     /// Number of pending requests
-    var pendingCount: Int {
+    public var pendingCount: Int {
         requests.count
     }
 
     /// Registers a new pending request
-    func addRequest(
+    public func addRequest(
         event: PermissionRequestEvent,
-        responder: IPCResponder,
+        responder: any IPCResponding,
         timeoutSeconds: TimeInterval? = defaultTimeoutSeconds
     ) {
         let request = PendingRequest(
@@ -108,7 +124,7 @@ actor PendingRequestManager {
     }
 
     /// Resolves a pending request with the user's decision
-    func resolve(requestId: String, decision: PermissionDecision) -> Bool {
+    public func resolve(requestId: String, decision: PermissionDecision) -> Bool {
         guard let request = requests[requestId] else {
             return false
         }
@@ -123,18 +139,18 @@ actor PendingRequestManager {
     }
 
     /// Removes a pending request (e.g., on disconnect) without sending a response
-    func remove(requestId: String) {
+    public func remove(requestId: String) {
         cleanup(requestId: requestId)
     }
 
     /// Gets a specific pending request
-    func getRequest(_ requestId: String) -> PendingRequest? {
+    public func getRequest(_ requestId: String) -> PendingRequest? {
         requests[requestId]
     }
 
     /// Reschedules or cancels timeout tasks for all in-flight requests.
     /// Called when timeout configuration changes.
-    func rescheduleTimeouts(effectiveTimeout: TimeInterval?) {
+    public func rescheduleTimeouts(effectiveTimeout: TimeInterval?) {
         // Cancel all existing timeout tasks
         for (_, task) in timeoutTasks {
             task.cancel()

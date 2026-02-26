@@ -101,6 +101,45 @@ struct TimeoutConfigTests {
         #expect(loaded.timeoutSeconds == 280)
     }
 
+    // MARK: - Store Clamping
+
+    @Test("save clamps timeoutSeconds below minimum to 10")
+    func saveClampLow() {
+        let defaults = UserDefaults(suiteName: "TimeoutConfigTests-clamp-low")!
+        defer { defaults.removePersistentDomain(forName: "TimeoutConfigTests-clamp-low") }
+
+        let config = TimeoutConfig(isEnabled: true, timeoutSeconds: 3)
+        TimeoutConfigStore.save(config, to: defaults)
+
+        let loaded = TimeoutConfigStore.load(from: defaults)
+        #expect(loaded.timeoutSeconds == 10)
+    }
+
+    @Test("save clamps timeoutSeconds above maximum to 280")
+    func saveClampHigh() {
+        let defaults = UserDefaults(suiteName: "TimeoutConfigTests-clamp-high")!
+        defer { defaults.removePersistentDomain(forName: "TimeoutConfigTests-clamp-high") }
+
+        let config = TimeoutConfig(isEnabled: true, timeoutSeconds: 999)
+        TimeoutConfigStore.save(config, to: defaults)
+
+        let loaded = TimeoutConfigStore.load(from: defaults)
+        #expect(loaded.timeoutSeconds == 280)
+    }
+
+    @Test("load clamps externally modified timeoutSeconds")
+    func loadClampExternallyModified() {
+        let defaults = UserDefaults(suiteName: "TimeoutConfigTests-external")!
+        defer { defaults.removePersistentDomain(forName: "TimeoutConfigTests-external") }
+
+        // Simulate external modification directly in UserDefaults
+        defaults.set(true, forKey: "timeout.isEnabled")
+        defaults.set(500, forKey: "timeout.seconds")
+
+        let loaded = TimeoutConfigStore.load(from: defaults)
+        #expect(loaded.timeoutSeconds == 280)
+    }
+
     // MARK: - Snapshot
 
     @Test("snapshot dump of TimeoutConfig")

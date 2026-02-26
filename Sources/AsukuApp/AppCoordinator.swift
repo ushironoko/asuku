@@ -212,7 +212,7 @@ final class AppCoordinator {
     }
 
     private func handlePermissionRequest(
-        event: PermissionRequestEvent, responder: IPCResponder
+        event: PermissionRequestEvent, responder: any IPCResponding
     ) async {
         print("[AppCoordinator] Received permission request: \(event.toolName) (\(event.requestId))")
         await pendingManager.addRequest(

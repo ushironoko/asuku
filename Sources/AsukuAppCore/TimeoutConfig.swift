@@ -39,7 +39,7 @@ public enum TimeoutConfigStore {
         let storedSeconds = defaults.integer(forKey: secondsKey)
         let timeoutSeconds: Int
         if storedSeconds > 0 {
-            timeoutSeconds = storedSeconds
+            timeoutSeconds = clamp(storedSeconds)
         } else {
             timeoutSeconds = 280
             defaults.set(280, forKey: secondsKey)
@@ -52,7 +52,12 @@ public enum TimeoutConfigStore {
     }
 
     public static func save(_ config: TimeoutConfig, to defaults: UserDefaults = .standard) {
+        let clamped = clamp(config.timeoutSeconds)
         defaults.set(config.isEnabled, forKey: enabledKey)
-        defaults.set(config.timeoutSeconds, forKey: secondsKey)
+        defaults.set(clamped, forKey: secondsKey)
+    }
+
+    private static func clamp(_ seconds: Int) -> Int {
+        max(10, min(280, seconds))
     }
 }

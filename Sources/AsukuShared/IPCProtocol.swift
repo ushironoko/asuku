@@ -177,6 +177,13 @@ public enum PermissionDecision: String, Codable, Sendable {
     case deny
 }
 
+// MARK: - IPC Responder Protocol
+
+/// Abstraction for sending IPC responses, enabling testability
+public protocol IPCResponding: Sendable {
+    func send(_ response: IPCResponse)
+}
+
 // MARK: - IPC Error Response
 
 public struct IPCError: Codable, Sendable {

@@ -15,7 +15,7 @@ private final class RequestIdHolder: @unchecked Sendable {
 }
 
 /// Wraps an NWConnection to allow sending responses back to a connected hook
-final class IPCResponder: Sendable {
+final class IPCResponder: IPCResponding, Sendable {
     let connection: NWConnection
     private let queue: DispatchQueue
 
@@ -69,7 +69,7 @@ final class IPCServer: @unchecked Sendable {
 
     /// Called when a permission request event is received
     var onPermissionRequest:
-        (@Sendable (PermissionRequestEvent, IPCResponder) -> Void)?
+        (@Sendable (PermissionRequestEvent, any IPCResponding) -> Void)?
 
     /// Called when a notification event is received
     var onNotification: (@Sendable (NotificationEvent) -> Void)?
