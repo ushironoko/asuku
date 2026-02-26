@@ -72,8 +72,14 @@ final class AppCoordinator {
                 guard let self else { return }
                 if let requestId {
                     Task { @MainActor in
+                        self.notificationManager.removeNotification(identifier: requestId)
                         await self.pendingManager.remove(requestId: requestId)
                         await self.refreshPendingRequests()
+                        self.appState.addRecentEvent(
+                            toolName: "Disconnect",
+                            kind: .timeout,
+                            sessionId: ""
+                        )
                     }
                 }
             }

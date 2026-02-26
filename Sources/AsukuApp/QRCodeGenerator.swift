@@ -18,11 +18,22 @@ enum QRCodeGenerator {
         falseColor.setValue(CIColor.white, forKey: "inputColor1")
         guard let coloredImage = falseColor.outputImage else { return nil }
 
-        let scale = size / coloredImage.extent.width
-        let scaled = coloredImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let extent = coloredImage.extent.width
+        let intScale = max(1, Int(floor(size / extent)))
+        let scaleFactor = CGFloat(intScale)
+        let scaled = coloredImage.transformed(
+            by: CGAffineTransform(scaleX: scaleFactor, y: scaleFactor))
+        let scaledSize = scaleFactor * extent
+        let padding = (size - scaledSize) / 2
+
         let rep = NSCIImageRep(ciImage: scaled)
-        let nsImage = NSImage(size: rep.size)
-        nsImage.addRepresentation(rep)
+        let nsImage = NSImage(size: NSSize(width: size, height: size))
+        nsImage.lockFocus()
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: size, height: size).fill()
+        rep.draw(
+            in: NSRect(x: padding, y: padding, width: scaledSize, height: scaledSize))
+        nsImage.unlockFocus()
         return nsImage
     }
 }
