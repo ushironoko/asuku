@@ -7,10 +7,11 @@ struct PendingRequest: Identifiable, Sendable {
     let event: PermissionRequestEvent
     let responder: IPCResponder
     let createdAt: Date
-    let timeoutSeconds: TimeInterval
+    let timeoutSeconds: TimeInterval?
 
     var isExpired: Bool {
-        Date().timeIntervalSince(createdAt) >= timeoutSeconds
+        guard let timeoutSeconds else { return false }
+        return Date().timeIntervalSince(createdAt) >= timeoutSeconds
     }
 
     /// Summary text for UI display
@@ -83,7 +84,7 @@ actor PendingRequestManager {
     func addRequest(
         event: PermissionRequestEvent,
         responder: IPCResponder,
-        timeoutSeconds: TimeInterval = defaultTimeoutSeconds
+        timeoutSeconds: TimeInterval? = defaultTimeoutSeconds
     ) {
         let request = PendingRequest(
             id: event.requestId,
@@ -94,14 +95,16 @@ actor PendingRequestManager {
         )
         requests[event.requestId] = request
 
-        // Start timeout timer
-        let requestId = event.requestId
-        let task = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(timeoutSeconds))
-            guard !Task.isCancelled else { return }
-            await self?.handleTimeout(requestId: requestId)
+        // Start timeout timer only when timeout is enabled
+        if let timeoutSeconds {
+            let requestId = event.requestId
+            let task = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(timeoutSeconds))
+                guard !Task.isCancelled else { return }
+                await self?.handleTimeout(requestId: requestId)
+            }
+            timeoutTasks[event.requestId] = task
         }
-        timeoutTasks[event.requestId] = task
     }
 
     /// Resolves a pending request with the user's decision
@@ -127,6 +130,33 @@ actor PendingRequestManager {
     /// Gets a specific pending request
     func getRequest(_ requestId: String) -> PendingRequest? {
         requests[requestId]
+    }
+
+    /// Reschedules or cancels timeout tasks for all in-flight requests.
+    /// Called when timeout configuration changes.
+    func rescheduleTimeouts(effectiveTimeout: TimeInterval?) {
+        // Cancel all existing timeout tasks
+        for (_, task) in timeoutTasks {
+            task.cancel()
+        }
+        timeoutTasks.removeAll()
+
+        guard let effectiveTimeout else { return }
+
+        // Reschedule each pending request with remaining time
+        for (requestId, request) in requests {
+            let elapsed = Date().timeIntervalSince(request.createdAt)
+            let remaining = max(0, effectiveTimeout - elapsed)
+            let rid = requestId
+            let task = Task { [weak self] in
+                if remaining > 0 {
+                    try? await Task.sleep(for: .seconds(remaining))
+                }
+                guard !Task.isCancelled else { return }
+                await self?.handleTimeout(requestId: rid)
+            }
+            timeoutTasks[requestId] = task
+        }
     }
 
     private func handleTimeout(requestId: String) {

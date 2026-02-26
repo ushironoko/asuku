@@ -35,6 +35,8 @@ final class AppCoordinator {
             Task { await resolveRequest(requestId: requestId, decision: decision) }
         case .ntfyConfigChanged:
             ntfyConfigChanged()
+        case .timeoutConfigChanged:
+            timeoutConfigChanged()
         case .stop:
             stop()
         }
@@ -134,6 +136,15 @@ final class AppCoordinator {
         }
     }
 
+    // MARK: - Timeout Config
+
+    private func timeoutConfigChanged() {
+        let effectiveTimeout = appState.timeoutConfig.effectiveTimeout
+        Task {
+            await pendingManager.rescheduleTimeouts(effectiveTimeout: effectiveTimeout)
+        }
+    }
+
     // MARK: - Webhook Server
 
     func ntfyConfigChanged() {
@@ -204,7 +215,11 @@ final class AppCoordinator {
         event: PermissionRequestEvent, responder: IPCResponder
     ) async {
         print("[AppCoordinator] Received permission request: \(event.toolName) (\(event.requestId))")
-        await pendingManager.addRequest(event: event, responder: responder)
+        await pendingManager.addRequest(
+            event: event,
+            responder: responder,
+            timeoutSeconds: appState.timeoutConfig.effectiveTimeout
+        )
         await refreshPendingRequests()
 
         if let request = await pendingManager.getRequest(event.requestId) {

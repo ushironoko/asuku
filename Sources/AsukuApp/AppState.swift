@@ -14,6 +14,7 @@ final class AppState {
     var webhookServerState: ServerState = .stopped
     var notificationPermissionGranted = false
     var ntfyConfig: NtfyConfig
+    var timeoutConfig: TimeoutConfig
 
     // Status monitoring
     var activeSessions: [SessionStatus] = []
@@ -22,8 +23,12 @@ final class AppState {
 
     private let maxRecentEvents = 50
 
-    init(ntfyConfig: NtfyConfig = NtfyConfigStore.load()) {
+    init(
+        ntfyConfig: NtfyConfig = NtfyConfigStore.load(),
+        timeoutConfig: TimeoutConfig = TimeoutConfigStore.load()
+    ) {
         self.ntfyConfig = ntfyConfig
+        self.timeoutConfig = timeoutConfig
     }
 
     func addRecentEvent(toolName: String, kind: RecentEvent.Kind, sessionId: String) {
@@ -43,6 +48,11 @@ final class AppState {
     func updateNtfyConfig(_ config: NtfyConfig) {
         ntfyConfig = config
         NtfyConfigStore.save(config)
+    }
+
+    func updateTimeoutConfig(_ config: TimeoutConfig) {
+        timeoutConfig = config
+        TimeoutConfigStore.save(config)
     }
 
     // MARK: - Status Monitoring
