@@ -32,6 +32,300 @@ private func makeEvent(requestId: String = UUID().uuidString) -> PermissionReque
 @Suite("PendingRequestManager Tests")
 struct PendingRequestManagerTests {
 
+    // MARK: - addRequest & basic queries
+
+    @Test("addRequest stores request and increments count")
+    func addRequestBasic() async {
+        let manager = PendingRequestManager()
+        let responder = MockIPCResponder()
+        let event = makeEvent(requestId: "r1")
+
+        await manager.addRequest(event: event, responder: responder)
+
+        let count = await manager.pendingCount
+        #expect(count == 1)
+        let request = await manager.getRequest("r1")
+        #expect(request != nil)
+        #expect(request?.id == "r1")
+    }
+
+    @Test("addRequest with nil timeout does not auto-deny")
+    func addRequestNilTimeout() async {
+        let manager = PendingRequestManager()
+        let responder = MockIPCResponder()
+        let event = makeEvent(requestId: "r1")
+
+        await manager.addRequest(event: event, responder: responder, timeoutSeconds: nil)
+        try? await Task.sleep(for: .seconds(0.3))
+
+        let count = await manager.pendingCount
+        #expect(count == 1)
+        #expect(responder.responses.isEmpty)
+    }
+
+    @Test("pendingRequests returns sorted by createdAt")
+    func pendingRequestsSorted() async {
+        let manager = PendingRequestManager()
+        let responder = MockIPCResponder()
+
+        let e1 = makeEvent(requestId: "r1")
+        await manager.addRequest(event: e1, responder: responder, timeoutSeconds: nil)
+        try? await Task.sleep(for: .milliseconds(10))
+        let e2 = makeEvent(requestId: "r2")
+        await manager.addRequest(event: e2, responder: responder, timeoutSeconds: nil)
+
+        let pending = await manager.pendingRequests
+        #expect(pending.count == 2)
+        #expect(pending[0].id == "r1")
+        #expect(pending[1].id == "r2")
+    }
+
+    @Test("getRequest returns nil for unknown ID")
+    func getRequestUnknown() async {
+        let manager = PendingRequestManager()
+        let result = await manager.getRequest("nonexistent")
+        #expect(result == nil)
+    }
+
+    // MARK: - resolve
+
+    @Test("resolve sends response and removes request")
+    func resolveSuccess() async {
+        let manager = PendingRequestManager()
+        let responder = MockIPCResponder()
+        let event = makeEvent(requestId: "r1")
+        await manager.addRequest(event: event, responder: responder, timeoutSeconds: nil)
+
+        let resolved = await manager.resolve(requestId: "r1", decision: .allow)
+        #expect(resolved == true)
+        #expect(responder.responses.count == 1)
+        #expect(responder.responses.first?.decision == .allow)
+
+        let count = await manager.pendingCount
+        #expect(count == 0)
+    }
+
+    @Test("resolve returns false for unknown request")
+    func resolveUnknown() async {
+        let manager = PendingRequestManager()
+        let resolved = await manager.resolve(requestId: "nonexistent", decision: .allow)
+        #expect(resolved == false)
+    }
+
+    // MARK: - remove
+
+    @Test("remove deletes request without sending response")
+    func removeRequest() async {
+        let manager = PendingRequestManager()
+        let responder = MockIPCResponder()
+        let event = makeEvent(requestId: "r1")
+        await manager.addRequest(event: event, responder: responder, timeoutSeconds: nil)
+
+        await manager.remove(requestId: "r1")
+
+        let count = await manager.pendingCount
+        #expect(count == 0)
+        #expect(responder.responses.isEmpty)
+    }
+
+    // MARK: - PendingRequest properties
+
+    @Test("isExpired returns false when timeoutSeconds is nil")
+    func isExpiredNilTimeout() {
+        let request = PendingRequest(
+            id: "r1",
+            event: makeEvent(),
+            responder: MockIPCResponder(),
+            createdAt: Date.distantPast,
+            timeoutSeconds: nil
+        )
+        #expect(request.isExpired == false)
+    }
+
+    @Test("isExpired returns true when elapsed exceeds timeout")
+    func isExpiredTrue() {
+        let request = PendingRequest(
+            id: "r1",
+            event: makeEvent(),
+            responder: MockIPCResponder(),
+            createdAt: Date.distantPast,
+            timeoutSeconds: 10
+        )
+        #expect(request.isExpired == true)
+    }
+
+    @Test("isExpired returns false when within timeout")
+    func isExpiredFalse() {
+        let request = PendingRequest(
+            id: "r1",
+            event: makeEvent(),
+            responder: MockIPCResponder(),
+            createdAt: Date(),
+            timeoutSeconds: 9999
+        )
+        #expect(request.isExpired == false)
+    }
+
+    // MARK: - displayTitle
+
+    @Test("displayTitle for Bash with command")
+    func displayTitleBash() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Bash",
+            toolInput: ["command": .string("ls -la")], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.displayTitle.hasPrefix("Bash: "))
+    }
+
+    @Test("displayTitle for Bash without command")
+    func displayTitleBashNoCommand() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Bash",
+            toolInput: [:], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.displayTitle == "Bash command")
+    }
+
+    @Test("displayTitle for Write with file_path")
+    func displayTitleWrite() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Write",
+            toolInput: ["file_path": .string("/tmp/test.txt")], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.displayTitle == "Write: /tmp/test.txt")
+    }
+
+    @Test("displayTitle for Edit without file_path")
+    func displayTitleEditNoPath() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Edit",
+            toolInput: [:], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.displayTitle == "Edit")
+    }
+
+    @Test("displayTitle for unknown tool")
+    func displayTitleUnknown() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "CustomTool",
+            toolInput: [:], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.displayTitle == "CustomTool")
+    }
+
+    // MARK: - notificationBody
+
+    @Test("notificationBody for Bash with command")
+    func notificationBodyBash() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Bash",
+            toolInput: ["command": .string("echo hello")], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.notificationBody.contains("echo hello"))
+    }
+
+    @Test("notificationBody for Bash without command")
+    func notificationBodyBashNoCommand() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Bash",
+            toolInput: [:], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.notificationBody == "Execute bash command")
+    }
+
+    @Test("notificationBody for Write with file_path")
+    func notificationBodyWrite() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Write",
+            toolInput: ["file_path": .string("/tmp/out.txt")], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.notificationBody == "Write to /tmp/out.txt")
+    }
+
+    @Test("notificationBody for Write without file_path")
+    func notificationBodyWriteNoPath() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Write",
+            toolInput: [:], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.notificationBody == "Write file")
+    }
+
+    @Test("notificationBody for Edit with file_path")
+    func notificationBodyEdit() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Edit",
+            toolInput: ["file_path": .string("/tmp/file.swift")], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.notificationBody == "Edit /tmp/file.swift")
+    }
+
+    @Test("notificationBody for Edit without file_path")
+    func notificationBodyEditNoPath() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Edit",
+            toolInput: [:], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.notificationBody == "Edit file")
+    }
+
+    @Test("notificationBody for unknown tool")
+    func notificationBodyUnknown() {
+        let event = PermissionRequestEvent(
+            requestId: "r1", sessionId: "s1", toolName: "Custom",
+            toolInput: ["key": .string("val")], cwd: "/tmp"
+        )
+        let request = PendingRequest(
+            id: "r1", event: event, responder: MockIPCResponder(),
+            createdAt: Date(), timeoutSeconds: nil
+        )
+        #expect(request.notificationBody.contains("Custom"))
+    }
+
     // MARK: - rescheduleTimeouts: disable (nil)
 
     @Test("rescheduleTimeouts with nil cancels all timeout tasks")
