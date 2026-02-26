@@ -5,11 +5,18 @@ struct AsukuApp: App {
     @State private var appState: AppState
     @State private var coordinator: AppCoordinator
 
+    private var contextPressure: Bool {
+        appState.activeSessions.contains { ($0.contextUsedPercent ?? 0) >= 80 }
+    }
+
     var body: some Scene {
         MenuBarExtra {
             MenuBarView(appState: appState, dispatch: coordinator.dispatch)
         } label: {
-            MenuBarIcon(hasPending: !appState.pendingRequests.isEmpty)
+            MenuBarIcon(
+                hasPending: !appState.pendingRequests.isEmpty,
+                contextPressure: contextPressure
+            )
         }
         .menuBarExtraStyle(.window)
 
@@ -18,6 +25,13 @@ struct AsukuApp: App {
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
+
+        Window("asuku Dashboard", id: "dashboard") {
+            DashboardView(appState: appState)
+        }
+        .windowResizability(.contentMinSize)
+        .defaultPosition(.center)
+        .defaultSize(width: 600, height: 450)
     }
 
     init() {

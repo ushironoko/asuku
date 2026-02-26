@@ -74,6 +74,9 @@ final class IPCServer: @unchecked Sendable {
     /// Called when a notification event is received
     var onNotification: (@Sendable (NotificationEvent) -> Void)?
 
+    /// Called when a status update event is received
+    var onStatusUpdate: (@Sendable (StatusUpdateEvent) -> Void)?
+
     /// Called when a hook disconnects (with the requestId if known)
     var onDisconnect: (@Sendable (String?) -> Void)?
 
@@ -205,6 +208,12 @@ final class IPCServer: @unchecked Sendable {
                 onNotification?(event)
                 responder.cancel()
             case .heartbeat:
+                responder.cancel()
+            case .statusUpdate(let event):
+                onStatusUpdate?(event)
+                responder.cancel()
+            case .unknown(let type):
+                print("[IPCServer] Unknown payload type: \(type), ignoring")
                 responder.cancel()
             }
         } catch {
