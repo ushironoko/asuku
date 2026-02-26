@@ -24,7 +24,7 @@ enum QRCodeGenerator {
         let scaled = coloredImage.transformed(
             by: CGAffineTransform(scaleX: scaleFactor, y: scaleFactor))
         let scaledSize = scaleFactor * extent
-        let padding = (size - scaledSize) / 2
+        let padding = floor((size - scaledSize) / 2)
 
         let rep = NSCIImageRep(ciImage: scaled)
         let nsImage = NSImage(size: NSSize(width: size, height: size))
