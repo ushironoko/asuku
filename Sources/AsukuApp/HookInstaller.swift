@@ -6,6 +6,12 @@ enum HookInstallResult {
 }
 
 enum HookInstaller {
+    /// Shell-escape a path by wrapping in single quotes
+    private static func shellEscape(_ path: String) -> String {
+        let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
+    }
+
     /// Path to Claude Code settings
     private static var settingsPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -126,6 +132,28 @@ enum HookInstaller {
         }
         notificationHooks.append(notificationHook)
         hooks["Notification"] = notificationHooks
+
+        // Statusline configuration
+        let escapedHookPath = shellEscape(hookPath)
+        let statuslineCommand: String
+        let existingCommand = (settings["statusLine"] as? [String: Any])?["command"] as? String
+        if let existing = existingCommand, !existing.contains("asuku-hook") {
+            // Existing non-asuku statusline: pipe chain
+            statuslineCommand = "\(escapedHookPath) statusline | \(existing)"
+        } else if existingCommand == nil {
+            // No existing statusline: passthrough only
+            statuslineCommand = "\(escapedHookPath) statusline"
+        } else {
+            // Already contains asuku-hook: keep as-is
+            statuslineCommand = existingCommand!
+        }
+
+        var statusLine = settings["statusLine"] as? [String: Any] ?? [:]
+        statusLine["command"] = statuslineCommand
+        if statusLine["type"] == nil {
+            statusLine["type"] = "command"
+        }
+        settings["statusLine"] = statusLine
 
         settings["hooks"] = hooks
 

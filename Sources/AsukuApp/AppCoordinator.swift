@@ -12,6 +12,8 @@ final class AppCoordinator {
     private var webhookServer: WebhookServer?
     private let pendingManager = PendingRequestManager()
     private let notificationManager = NotificationManager()
+    private let statusThrottler = StatusThrottler()
+    private var configRefreshTask: Task<Void, Never>?
 
     init(appState: AppState) {
         self.appState = appState
@@ -57,6 +59,11 @@ final class AppCoordinator {
                 Task { @MainActor in
                     await self.handleNotification(event: event)
                 }
+            }
+
+            server.onStatusUpdate = { [weak self] event in
+                guard let self else { return }
+                Task { await self.statusThrottler.receive(event) }
             }
 
             server.onDisconnect = { [weak self] requestId in
@@ -110,6 +117,19 @@ final class AppCoordinator {
                     kind: .timeout,
                     sessionId: ""
                 )
+            }
+        }
+
+        await statusThrottler.setOnFlush { [weak self] events, staleSessionIds in
+            self?.appState.applyStatusUpdates(events, removing: staleSessionIds)
+        }
+
+        loadConfigInBackground(appState: appState)
+        let stateRef = appState
+        configRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                self?.loadConfigInBackground(appState: stateRef)
             }
         }
     }
@@ -216,6 +236,20 @@ final class AppCoordinator {
         ipcServer = nil
         appState.ipcServerState = .stopped
         stopWebhookServer()
+        configRefreshTask?.cancel()
+        configRefreshTask = nil
+        Task { await statusThrottler.stop() }
+    }
+
+    nonisolated private func loadConfigInBackground(appState: AppState) {
+        Task.detached {
+            let plugins = ConfigReader.readEnabledPlugins()
+            let history = ConfigReader.readSessionHistory()
+            await MainActor.run {
+                appState.updatePlugins(plugins)
+                appState.updateSessionHistory(history)
+            }
+        }
     }
 }
 

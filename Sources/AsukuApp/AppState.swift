@@ -15,6 +15,11 @@ final class AppState {
     var notificationPermissionGranted = false
     var ntfyConfig: NtfyConfig
 
+    // Status monitoring
+    var activeSessions: [SessionStatus] = []
+    var enabledPlugins: [EnabledPlugin] = []
+    var sessionHistory: [SessionHistoryEntry] = []
+
     private let maxRecentEvents = 50
 
     init(ntfyConfig: NtfyConfig = NtfyConfigStore.load()) {
@@ -38,5 +43,39 @@ final class AppState {
     func updateNtfyConfig(_ config: NtfyConfig) {
         ntfyConfig = config
         NtfyConfigStore.save(config)
+    }
+
+    // MARK: - Status Monitoring
+
+    func applyStatusUpdates(_ events: [StatusUpdateEvent], removing staleSessionIds: [String]) {
+        // Remove stale sessions that the throttler evicted
+        if !staleSessionIds.isEmpty {
+            activeSessions.removeAll { staleSessionIds.contains($0.sessionId) }
+        }
+
+        // Upsert active sessions
+        for event in events {
+            if let index = activeSessions.firstIndex(where: { $0.sessionId == event.sessionId }) {
+                activeSessions[index].statusline = event.statusline
+                activeSessions[index].lastUpdated = event.timestamp
+            } else {
+                activeSessions.insert(
+                    SessionStatus(
+                        sessionId: event.sessionId,
+                        statusline: event.statusline,
+                        lastUpdated: event.timestamp
+                    ),
+                    at: 0
+                )
+            }
+        }
+    }
+
+    func updatePlugins(_ plugins: [EnabledPlugin]) {
+        enabledPlugins = plugins
+    }
+
+    func updateSessionHistory(_ history: [SessionHistoryEntry]) {
+        sessionHistory = history
     }
 }
