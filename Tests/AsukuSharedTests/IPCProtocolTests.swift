@@ -492,6 +492,218 @@ struct IPCProtocolTests {
         }
     }
 
+    // MARK: - StatusUpdate payload
+
+    @Test("IPCMessage with StatusUpdate encodes and decodes")
+    func statusUpdateRoundtrip() throws {
+        let statusline = StatuslineData(
+            sessionId: "sess-su",
+            model: ModelInfo(id: "claude-opus-4-6", displayName: "Opus 4.6"),
+            contextWindow: ContextWindowInfo(usedPercentage: 78)
+        )
+        let event = StatusUpdateEvent(
+            sessionId: "sess-su",
+            statusline: statusline,
+            timestamp: Date(timeIntervalSince1970: 1700000000)
+        )
+        let message = IPCMessage(payload: .statusUpdate(event))
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(message)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(IPCMessage.self, from: data)
+
+        if case .statusUpdate(let decodedEvent) = decoded.payload {
+            #expect(decodedEvent.sessionId == "sess-su")
+            #expect(decodedEvent.statusline.model?.displayName == "Opus 4.6")
+            #expect(decodedEvent.statusline.contextWindow?.usedPercentage == 78)
+        } else {
+            Issue.record("Expected statusUpdate payload")
+        }
+    }
+
+    // MARK: - Unknown payload
+
+    @Test("Unknown payload type decodes gracefully")
+    func unknownPayloadDecode() throws {
+        let json = """
+            {
+                "protocolVersion": 1,
+                "payload": {"type": "future_feature", "data": {"key": "value"}}
+            }
+            """
+        let decoded = try JSONDecoder().decode(IPCMessage.self, from: Data(json.utf8))
+        if case .unknown(let typeString) = decoded.payload {
+            #expect(typeString == "future_feature")
+        } else {
+            Issue.record("Expected unknown payload")
+        }
+    }
+
+    @Test("Unknown payload encodes type string correctly")
+    func unknownPayloadEncode() throws {
+        let message = IPCMessage(payload: .unknown("experimental"))
+        let data = try JSONEncoder().encode(message)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let payload = json["payload"] as! [String: Any]
+        #expect(payload["type"] as? String == "experimental")
+        // unknown payload should not have data key
+        #expect(payload["data"] == nil)
+    }
+
+    @Test("Unknown payload without data key decodes")
+    func unknownPayloadNoData() throws {
+        let json = """
+            {"protocolVersion": 1, "payload": {"type": "mystery"}}
+            """
+        let decoded = try JSONDecoder().decode(IPCMessage.self, from: Data(json.utf8))
+        if case .unknown(let typeString) = decoded.payload {
+            #expect(typeString == "mystery")
+        } else {
+            Issue.record("Expected unknown payload")
+        }
+    }
+
+    // MARK: - Wire Format Additional
+
+    @Test("Wire format with multiple frames in buffer only decodes first")
+    func wireFormatMultipleFrames() {
+        let frame1Data = Data("hello".utf8)
+        let frame2Data = Data("world".utf8)
+        let frame1 = IPCWireFormat.encode(frame1Data)
+        let frame2 = IPCWireFormat.encode(frame2Data)
+
+        var buffer = frame1
+        buffer.append(frame2)
+
+        let result = IPCWireFormat.decode(buffer)
+        #expect(result != nil)
+        #expect(result?.payload == frame1Data)
+        #expect(result?.bytesConsumed == frame1.count)
+
+        // Remaining bytes should contain frame2
+        let remaining = buffer.suffix(from: result!.bytesConsumed)
+        let result2 = IPCWireFormat.decode(Data(remaining))
+        #expect(result2 != nil)
+        #expect(result2?.payload == frame2Data)
+    }
+
+    @Test("Wire format exactly at boundary size")
+    func wireFormatExactBoundary() {
+        let payload = Data(repeating: 0xAB, count: 100)
+        let encoded = IPCWireFormat.encode(payload)
+        #expect(encoded.count == 104)  // 4 + 100
+
+        let decoded = IPCWireFormat.decode(encoded)
+        #expect(decoded?.payload == payload)
+        #expect(decoded?.bytesConsumed == 104)
+    }
+
+    // MARK: - Sanitizer Additional
+
+    @Test("Sanitizer masks multiple patterns in one string")
+    func sanitizeMultiplePatterns() {
+        let input = "TOKEN=secret1 API_KEY=secret2 PASSWORD=secret3"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("secret1"))
+        #expect(!sanitized.contains("secret2"))
+        #expect(!sanitized.contains("secret3"))
+        #expect(sanitized.contains("TOKEN=***"))
+        #expect(sanitized.contains("API_KEY=***"))
+        #expect(sanitized.contains("PASSWORD=***"))
+    }
+
+    @Test("sanitizeForNotification with sensitive data and truncation")
+    func sanitizeForNotificationCombined() {
+        let input = "TOKEN=mysecret " + String(repeating: "a", count: 300)
+        let sanitized = InputSanitizer.sanitizeForNotification(input, maxLength: 50)
+        #expect(!sanitized.contains("mysecret"))
+        #expect(sanitized.count <= 53)
+        #expect(sanitized.hasSuffix("..."))
+    }
+
+    @Test("Sanitizer with pattern at end of string (no trailing delimiter)")
+    func sanitizePatternAtEnd() {
+        let input = "TOKEN=endofsecret"
+        let sanitized = InputSanitizer.sanitize(input)
+        #expect(!sanitized.contains("endofsecret"))
+        #expect(sanitized == "TOKEN=***")
+    }
+
+    // MARK: - IPCMessage with custom protocol version
+
+    @Test("IPCMessage with explicit protocol version")
+    func messageCustomVersion() {
+        let message = IPCMessage(protocolVersion: 99, payload: .heartbeat)
+        #expect(message.protocolVersion == 99)
+    }
+
+    // MARK: - Snapshot: StatusUpdate and Unknown
+
+    @Test("snapshot StatusUpdate JSON format")
+    func snapshotStatusUpdateJSON() throws {
+        let statusline = StatuslineData(
+            sessionId: "sess-snap-su",
+            model: ModelInfo(id: "claude-opus-4-6", displayName: "Opus 4.6"),
+            contextWindow: ContextWindowInfo(usedPercentage: 78)
+        )
+        let event = StatusUpdateEvent(
+            sessionId: "sess-snap-su",
+            statusline: statusline,
+            timestamp: Date(timeIntervalSince1970: 1700000000)
+        )
+        let message = IPCMessage(payload: .statusUpdate(event))
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: message, as: .json(encoder)) {
+            """
+            {
+              "payload" : {
+                "data" : {
+                  "sessionId" : "sess-snap-su",
+                  "statusline" : {
+                    "context_window" : {
+                      "used_percentage" : 78
+                    },
+                    "model" : {
+                      "display_name" : "Opus 4.6",
+                      "id" : "claude-opus-4-6"
+                    },
+                    "session_id" : "sess-snap-su"
+                  },
+                  "timestamp" : "2023-11-14T22:13:20Z"
+                },
+                "type" : "statusUpdate"
+              },
+              "protocolVersion" : 1
+            }
+            """
+        }
+    }
+
+    @Test("snapshot Unknown payload JSON format")
+    func snapshotUnknownJSON() throws {
+        let message = IPCMessage(payload: .unknown("future_feature"))
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        assertInlineSnapshot(of: message, as: .json(encoder)) {
+            """
+            {
+              "payload" : {
+                "type" : "future_feature"
+              },
+              "protocolVersion" : 1
+            }
+            """
+        }
+    }
+
     // MARK: - SocketPathError
 
     @Test("SocketPathError.pathTooLong description")

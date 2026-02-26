@@ -26,7 +26,11 @@ struct MenuBarView: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
-            Divider()
+            // Active session status
+            if let session = appState.activeSessions.first {
+                SessionStatusCompactView(session: session)
+                Divider()
+            }
 
             // Pending requests
             if appState.pendingRequests.isEmpty {
@@ -86,6 +90,12 @@ struct MenuBarView: View {
                     }
                     showInstallAlert = true
                 }
+            }
+            .padding(.horizontal, 12)
+
+            Button("Dashboard...") {
+                openWindow(id: "dashboard")
+                NSApp.activate(ignoringOtherApps: true)
             }
             .padding(.horizontal, 12)
 

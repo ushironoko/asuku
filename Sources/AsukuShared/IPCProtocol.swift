@@ -48,7 +48,9 @@ public struct IPCMessage: Codable, Sendable {
 public enum IPCPayload: Codable, Sendable {
     case permissionRequest(PermissionRequestEvent)
     case notification(NotificationEvent)
+    case statusUpdate(StatusUpdateEvent)
     case heartbeat
+    case unknown(String)
 
     private enum CodingKeys: String, CodingKey {
         case type
@@ -58,6 +60,7 @@ public enum IPCPayload: Codable, Sendable {
     private enum PayloadType: String, Codable {
         case permissionRequest
         case notification
+        case statusUpdate
         case heartbeat
     }
 
@@ -70,14 +73,25 @@ public enum IPCPayload: Codable, Sendable {
         case .notification(let event):
             try container.encode(PayloadType.notification, forKey: .type)
             try container.encode(event, forKey: .data)
+        case .statusUpdate(let event):
+            try container.encode(PayloadType.statusUpdate, forKey: .type)
+            try container.encode(event, forKey: .data)
         case .heartbeat:
             try container.encode(PayloadType.heartbeat, forKey: .type)
+        case .unknown(let typeString):
+            try container.encode(typeString, forKey: .type)
         }
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let type = try container.decode(PayloadType.self, forKey: .type)
+        let typeString = try container.decode(String.self, forKey: .type)
+
+        guard let type = PayloadType(rawValue: typeString) else {
+            self = .unknown(typeString)
+            return
+        }
+
         switch type {
         case .permissionRequest:
             let event = try container.decode(PermissionRequestEvent.self, forKey: .data)
@@ -85,6 +99,9 @@ public enum IPCPayload: Codable, Sendable {
         case .notification:
             let event = try container.decode(NotificationEvent.self, forKey: .data)
             self = .notification(event)
+        case .statusUpdate:
+            let event = try container.decode(StatusUpdateEvent.self, forKey: .data)
+            self = .statusUpdate(event)
         case .heartbeat:
             self = .heartbeat
         }
