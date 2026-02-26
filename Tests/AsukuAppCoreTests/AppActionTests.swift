@@ -35,6 +35,11 @@ struct AppActionTests {
         #expect(AppAction.ntfyConfigChanged == AppAction.ntfyConfigChanged)
     }
 
+    @Test("timeoutConfigChanged actions are equal")
+    func timeoutConfigChangedEqual() {
+        #expect(AppAction.timeoutConfigChanged == AppAction.timeoutConfigChanged)
+    }
+
     @Test("stop actions are equal")
     func stopEqual() {
         #expect(AppAction.stop == AppAction.stop)
@@ -43,12 +48,16 @@ struct AppActionTests {
     @Test("different action cases are not equal")
     func differentCasesNotEqual() {
         let resolve = AppAction.resolveRequest(requestId: "r", decision: .allow)
-        let configChanged = AppAction.ntfyConfigChanged
+        let ntfyChanged = AppAction.ntfyConfigChanged
+        let timeoutChanged = AppAction.timeoutConfigChanged
         let stop = AppAction.stop
 
-        #expect(resolve != configChanged)
+        #expect(resolve != ntfyChanged)
+        #expect(resolve != timeoutChanged)
         #expect(resolve != stop)
-        #expect(configChanged != stop)
+        #expect(ntfyChanged != timeoutChanged)
+        #expect(ntfyChanged != stop)
+        #expect(timeoutChanged != stop)
     }
 
     // MARK: - Exhaustive switch
@@ -59,6 +68,7 @@ struct AppActionTests {
             .resolveRequest(requestId: "r1", decision: .allow),
             .resolveRequest(requestId: "r2", decision: .deny),
             .ntfyConfigChanged,
+            .timeoutConfigChanged,
             .stop,
         ]
 
@@ -69,6 +79,8 @@ struct AppActionTests {
                 descriptions.append("resolve(\(id), \(decision.rawValue))")
             case .ntfyConfigChanged:
                 descriptions.append("ntfyConfigChanged")
+            case .timeoutConfigChanged:
+                descriptions.append("timeoutConfigChanged")
             case .stop:
                 descriptions.append("stop")
             }
@@ -79,6 +91,7 @@ struct AppActionTests {
             resolve(r1, allow)
             resolve(r2, deny)
             ntfyConfigChanged
+            timeoutConfigChanged
             stop
             """
         }
@@ -113,6 +126,12 @@ struct AppActionTests {
         assertInlineSnapshot(of: AppAction.ntfyConfigChanged, as: .dump) {
             """
             - AppAction.ntfyConfigChanged
+
+            """
+        }
+        assertInlineSnapshot(of: AppAction.timeoutConfigChanged, as: .dump) {
+            """
+            - AppAction.timeoutConfigChanged
 
             """
         }

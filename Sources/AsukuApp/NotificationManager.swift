@@ -1,4 +1,5 @@
 import AppKit
+import AsukuAppCore
 import AsukuShared
 import Foundation
 import UserNotifications

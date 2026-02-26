@@ -138,6 +138,55 @@ struct SessionStatusTests {
         #expect(session.id == "my-session")
     }
 
+    // MARK: - Remote Control URL
+
+    @Test("remoteControlURL format with valid session ID")
+    func remoteControlURL() {
+        let session = SessionStatus(
+            sessionId: "abc-123",
+            statusline: StatuslineData(),
+            lastUpdated: Date()
+        )
+        #expect(session.hasValidSessionId)
+        #expect(session.remoteControlURL?.absoluteString == "https://claude.ai/code/session_abc-123")
+    }
+
+    @Test("remoteControlURL with UUID sessionId")
+    func remoteControlURLComplexId() {
+        let session = SessionStatus(
+            sessionId: "550e8400-e29b-41d4-a716-446655440000",
+            statusline: StatuslineData(),
+            lastUpdated: Date()
+        )
+        #expect(session.hasValidSessionId)
+        #expect(
+            session.remoteControlURL?.absoluteString
+                == "https://claude.ai/code/session_550e8400-e29b-41d4-a716-446655440000"
+        )
+    }
+
+    @Test("remoteControlURL returns nil for transcript path fallback")
+    func remoteControlURLTranscriptPath() {
+        let session = SessionStatus(
+            sessionId: "/Users/foo/.claude/sessions/abc/transcript.jsonl",
+            statusline: StatuslineData(),
+            lastUpdated: Date()
+        )
+        #expect(!session.hasValidSessionId)
+        #expect(session.remoteControlURL == nil)
+    }
+
+    @Test("remoteControlURL returns nil for empty sessionId")
+    func remoteControlURLEmptyId() {
+        let session = SessionStatus(
+            sessionId: "",
+            statusline: StatuslineData(),
+            lastUpdated: Date()
+        )
+        #expect(!session.hasValidSessionId)
+        #expect(session.remoteControlURL == nil)
+    }
+
     // MARK: - Equatable
 
     @Test("SessionStatus with identical values are equal")

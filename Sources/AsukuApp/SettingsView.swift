@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var hookInstalled = false
     @State private var ntfySetupExpanded = false
     @State private var webhookPortText = ""
+    @State private var timeoutDebounceTask: Task<Void, Never>?
 
     var body: some View {
         Form {
@@ -186,6 +187,49 @@ struct SettingsView: View {
                         }
                         .font(.callout)
                     }
+                }
+            }
+
+            Section("Auto-Timeout") {
+                Toggle("Enable auto-timeout", isOn: $appState.timeoutConfig.isEnabled)
+                    .onChange(of: appState.timeoutConfig.isEnabled) { _, _ in
+                        appState.updateTimeoutConfig(appState.timeoutConfig)
+                        dispatch(.timeoutConfigChanged)
+                    }
+
+                if appState.timeoutConfig.isEnabled {
+                    HStack {
+                        Text("Timeout")
+                        Spacer()
+                        Text("\(appState.timeoutConfig.timeoutSeconds)s")
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(appState.timeoutConfig.timeoutSeconds) },
+                            set: { appState.timeoutConfig.timeoutSeconds = Int($0) }
+                        ),
+                        in: 10...280,
+                        step: 10
+                    )
+                    .onChange(of: appState.timeoutConfig.timeoutSeconds) { _, _ in
+                        appState.updateTimeoutConfig(appState.timeoutConfig)
+                        timeoutDebounceTask?.cancel()
+                        timeoutDebounceTask = Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(300))
+                            guard !Task.isCancelled else { return }
+                            dispatch(.timeoutConfigChanged)
+                        }
+                    }
+                    Text("Claude Code's 300s hook timeout acts as the hard limit.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(
+                        "Auto-timeout is disabled. Requests wait until you respond or Claude Code's 300s timeout triggers."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
 

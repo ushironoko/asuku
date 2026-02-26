@@ -35,6 +35,8 @@ final class AppCoordinator {
             Task { await resolveRequest(requestId: requestId, decision: decision) }
         case .ntfyConfigChanged:
             ntfyConfigChanged()
+        case .timeoutConfigChanged:
+            timeoutConfigChanged()
         case .stop:
             stop()
         }
@@ -70,8 +72,14 @@ final class AppCoordinator {
                 guard let self else { return }
                 if let requestId {
                     Task { @MainActor in
+                        self.notificationManager.removeNotification(identifier: requestId)
                         await self.pendingManager.remove(requestId: requestId)
                         await self.refreshPendingRequests()
+                        self.appState.addRecentEvent(
+                            toolName: "Disconnect",
+                            kind: .timeout,
+                            sessionId: ""
+                        )
                     }
                 }
             }
@@ -131,6 +139,15 @@ final class AppCoordinator {
                 try? await Task.sleep(for: .seconds(60))
                 self?.loadConfigInBackground(appState: stateRef)
             }
+        }
+    }
+
+    // MARK: - Timeout Config
+
+    private func timeoutConfigChanged() {
+        let effectiveTimeout = appState.timeoutConfig.effectiveTimeout
+        Task {
+            await pendingManager.rescheduleTimeouts(effectiveTimeout: effectiveTimeout)
         }
     }
 
@@ -201,10 +218,14 @@ final class AppCoordinator {
     }
 
     private func handlePermissionRequest(
-        event: PermissionRequestEvent, responder: IPCResponder
+        event: PermissionRequestEvent, responder: any IPCResponding
     ) async {
         print("[AppCoordinator] Received permission request: \(event.toolName) (\(event.requestId))")
-        await pendingManager.addRequest(event: event, responder: responder)
+        await pendingManager.addRequest(
+            event: event,
+            responder: responder,
+            timeoutSeconds: appState.timeoutConfig.effectiveTimeout
+        )
         await refreshPendingRequests()
 
         if let request = await pendingManager.getRequest(event.requestId) {

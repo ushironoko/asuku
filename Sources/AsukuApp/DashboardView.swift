@@ -1,3 +1,4 @@
+import AppKit
 import AsukuAppCore
 import AsukuShared
 import SwiftUI
@@ -46,6 +47,7 @@ private struct ActiveSessionsTab: View {
 
 private struct SessionRow: View {
     let session: SessionStatus
+    @State private var showQRSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -61,6 +63,13 @@ private struct SessionRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
                 Spacer()
+                if session.remoteControlURL != nil {
+                    Button { showQRSheet = true } label: {
+                        Image(systemName: "qrcode")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Show remote control QR code")
+                }
                 Text(session.lastUpdated, style: .relative)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -106,6 +115,9 @@ private struct SessionRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+        .sheet(isPresented: $showQRSheet) {
+            QRCodeSheet(session: session)
+        }
     }
 
     private func contextColor(for percent: Int) -> Color {
@@ -179,31 +191,132 @@ private struct HistoryTab: View {
             )
         } else {
             List(entries) { entry in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.displayText.isEmpty ? entry.sessionId : entry.displayText)
-                            .font(.body)
-                            .lineLimit(1)
-                        if !entry.projectPath.isEmpty {
-                            Text(entry.projectPath)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing) {
-                        Text(String(entry.sessionId.prefix(8)))
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .monospaced()
-                        Text(entry.timestamp, style: .relative)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                HistoryRow(entry: entry)
             }
         }
+    }
+}
+
+private struct HistoryRow: View {
+    let entry: SessionHistoryEntry
+    @State private var copied = false
+    @State private var feedbackTask: Task<Void, Never>?
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.displayText.isEmpty ? entry.sessionId : entry.displayText)
+                    .font(.body)
+                    .lineLimit(1)
+                if !entry.projectPath.isEmpty {
+                    Text(entry.projectPath)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            Spacer()
+            Button {
+                copyResumeCommand()
+            } label: {
+                Image(systemName: copied ? "checkmark.circle.fill" : "doc.on.doc")
+                    .foregroundStyle(copied ? .green : .secondary)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.borderless)
+            .help("Copy: claude --resume \(entry.sessionId)")
+            VStack(alignment: .trailing) {
+                Text(String(entry.sessionId.prefix(8)))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospaced()
+                Text(entry.timestamp, style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contextMenu {
+            Button("Copy resume command") {
+                copyResumeCommand()
+            }
+            Button("Copy session ID") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(entry.sessionId, forType: .string)
+            }
+        }
+        .onDisappear { feedbackTask?.cancel() }
+    }
+
+    private func copyResumeCommand() {
+        let escaped = entry.sessionId.replacingOccurrences(of: "'", with: "'\\''")
+        let command = "claude --resume '\(escaped)'"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        copied = true
+        feedbackTask?.cancel()
+        feedbackTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            if !Task.isCancelled { copied = false }
+        }
+    }
+}
+
+// MARK: - QR Code Sheet
+
+private struct QRCodeSheet: View {
+    let session: SessionStatus
+    @State private var copied = false
+    @State private var feedbackTask: Task<Void, Never>?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Remote Control")
+                .font(.headline)
+            Text("Session: \(String(session.sessionId.prefix(8)))...")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let url = session.remoteControlURL,
+                let qrImage = QRCodeGenerator.generate(from: url.absoluteString)
+            {
+                Image(nsImage: qrImage)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 200, height: 200)
+            }
+
+            if let url = session.remoteControlURL {
+                Text(url.absoluteString)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    copied = true
+                    feedbackTask?.cancel()
+                    feedbackTask = Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(2))
+                        if !Task.isCancelled { copied = false }
+                    }
+                } label: {
+                    Label(
+                        copied ? "Copied!" : "Copy URL",
+                        systemImage: copied ? "checkmark.circle.fill" : "doc.on.doc"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Button("Close") { dismiss() }
+                .buttonStyle(.bordered)
+        }
+        .padding(24)
+        .frame(width: 300)
+        .onDisappear { feedbackTask?.cancel() }
     }
 }
