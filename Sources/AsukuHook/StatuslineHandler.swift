@@ -22,8 +22,6 @@ enum StatuslineHandler {
         }
 
         // Build IPC message
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
         let event = StatusUpdateEvent(
             sessionId: sessionId,
             statusline: statusline,
