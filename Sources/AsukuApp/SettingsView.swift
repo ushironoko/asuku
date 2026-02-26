@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var hookInstalled = false
     @State private var ntfySetupExpanded = false
     @State private var webhookPortText = ""
+    @State private var timeoutDebounceTask: Task<Void, Never>?
 
     var body: some View {
         Form {
@@ -213,7 +214,12 @@ struct SettingsView: View {
                     )
                     .onChange(of: appState.timeoutConfig.timeoutSeconds) { _, _ in
                         appState.updateTimeoutConfig(appState.timeoutConfig)
-                        dispatch(.timeoutConfigChanged)
+                        timeoutDebounceTask?.cancel()
+                        timeoutDebounceTask = Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(300))
+                            guard !Task.isCancelled else { return }
+                            dispatch(.timeoutConfigChanged)
+                        }
                     }
                     Text("Claude Code's 300s hook timeout acts as the hard limit.")
                         .font(.caption)

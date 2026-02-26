@@ -7,7 +7,7 @@ public struct PendingRequest: Identifiable, Sendable {
     public let event: PermissionRequestEvent
     public let responder: any IPCResponding
     public let createdAt: Date
-    public let timeoutSeconds: TimeInterval?
+    public var timeoutSeconds: TimeInterval?
 
     public init(
         id: String,
@@ -156,6 +156,11 @@ public actor PendingRequestManager {
             task.cancel()
         }
         timeoutTasks.removeAll()
+
+        // Update stored timeout so isExpired stays consistent
+        for requestId in requests.keys {
+            requests[requestId]?.timeoutSeconds = effectiveTimeout
+        }
 
         guard let effectiveTimeout else { return }
 

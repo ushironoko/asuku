@@ -245,6 +245,7 @@ private struct HistoryRow: View {
                 NSPasteboard.general.setString(entry.sessionId, forType: .string)
             }
         }
+        .onDisappear { feedbackTask?.cancel() }
     }
 
     private func copyResumeCommand() {
@@ -316,5 +317,6 @@ private struct QRCodeSheet: View {
         }
         .padding(24)
         .frame(width: 300)
+        .onDisappear { feedbackTask?.cancel() }
     }
 }

@@ -326,6 +326,39 @@ struct PendingRequestManagerTests {
         #expect(request.notificationBody.contains("Custom"))
     }
 
+    // MARK: - rescheduleTimeouts updates timeoutSeconds
+
+    @Test("rescheduleTimeouts updates stored timeoutSeconds on requests")
+    func rescheduleUpdatesTimeoutSeconds() async {
+        let manager = PendingRequestManager()
+        let responder = MockIPCResponder()
+        let event = makeEvent(requestId: "r1")
+
+        await manager.addRequest(event: event, responder: responder, timeoutSeconds: 280)
+
+        let before = await manager.getRequest("r1")
+        #expect(before?.timeoutSeconds == 280)
+
+        await manager.rescheduleTimeouts(effectiveTimeout: 60)
+
+        let after = await manager.getRequest("r1")
+        #expect(after?.timeoutSeconds == 60)
+    }
+
+    @Test("rescheduleTimeouts with nil sets timeoutSeconds to nil")
+    func rescheduleNilUpdatesTimeoutSeconds() async {
+        let manager = PendingRequestManager()
+        let responder = MockIPCResponder()
+        let event = makeEvent(requestId: "r1")
+
+        await manager.addRequest(event: event, responder: responder, timeoutSeconds: 280)
+        await manager.rescheduleTimeouts(effectiveTimeout: nil)
+
+        let request = await manager.getRequest("r1")
+        #expect(request?.timeoutSeconds == nil)
+        #expect(request?.isExpired == false)
+    }
+
     // MARK: - rescheduleTimeouts: disable (nil)
 
     @Test("rescheduleTimeouts with nil cancels all timeout tasks")
