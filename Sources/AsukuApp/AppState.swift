@@ -95,6 +95,11 @@ final class AppState {
 
     func updateToolUsage(_ snapshot: ToolUsageSnapshot) {
         toolUsageSnapshot = snapshot
+        // Reset real-time counts when telemetry is refreshed to avoid double counting.
+        // Telemetry already includes successfully executed tools, so we only need
+        // realTimeToolCounts for tracking between telemetry refreshes.
+        realTimeToolCounts = [:]
+        ToolCountStore.save([:])
     }
 
     func trackToolUse(toolName: String, category: ToolCategory = .tool) {

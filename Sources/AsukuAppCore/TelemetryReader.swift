@@ -14,6 +14,9 @@ public enum TelemetryReader {
         "tengu_input_command",
     ]
 
+    /// Maximum file size to read (50 MB). Files larger than this are skipped.
+    private static let maxFileSize: UInt64 = 50 * 1024 * 1024
+
     /// Reads all telemetry JSONL files and returns aggregated tool usage.
     /// Pass `dirPath` to override the default telemetry directory (for testing).
     public static func readToolUsage(from dirPath: String? = nil) -> ToolUsageSnapshot {
@@ -31,6 +34,13 @@ public enum TelemetryReader {
 
         for fileName in jsonFiles {
             let filePath = (dir as NSString).appendingPathComponent(fileName)
+            // Skip files exceeding size limit to avoid excessive memory usage
+            if let attrs = try? fm.attributesOfItem(atPath: filePath),
+                let fileSize = attrs[.size] as? UInt64,
+                fileSize > maxFileSize
+            {
+                continue
+            }
             guard let handle = FileHandle(forReadingAtPath: filePath) else { continue }
             let data = handle.readDataToEndOfFile()
             handle.closeFile()
