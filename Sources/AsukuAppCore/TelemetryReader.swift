@@ -10,7 +10,6 @@ public enum TelemetryReader {
 
     private static let targetEventNames: Set<String> = [
         "tengu_tool_use_success",
-        "tengu_skill_loaded",
         "tengu_agent_tool_selected",
         "tengu_input_command",
     ]
@@ -92,9 +91,6 @@ public enum TelemetryReader {
         case "tengu_tool_use_success":
             guard let toolName = metadata["toolName"] as? String else { return nil }
             return (toolName, .tool)
-        case "tengu_skill_loaded":
-            guard let skillName = metadata["skill_name"] as? String else { return nil }
-            return (skillName, .skill)
         case "tengu_agent_tool_selected":
             guard let agentType = metadata["agent_type"] as? String else { return nil }
             return (agentType, .agent)

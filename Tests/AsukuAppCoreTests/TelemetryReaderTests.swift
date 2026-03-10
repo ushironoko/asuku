@@ -19,14 +19,13 @@ struct TelemetryReaderTests {
         #expect(result?.category == .tool)
     }
 
-    @Test("Parse tengu_skill_loaded extracts skill_name as .skill")
-    func parseSkillLoaded() {
+    @Test("tengu_skill_loaded is ignored (session startup noise)")
+    func parseSkillLoadedIgnored() {
         let line = """
             {"event_type":"ClaudeCodeInternalEvent","event_data":{"event_name":"tengu_skill_loaded","additional_metadata":"{\\"skill_name\\":\\"keybindings-help\\",\\"skill_source\\":\\"bundled\\"}"}}
             """
         let result = TelemetryReader.parseToolUsageLine(line)
-        #expect(result?.name == "keybindings-help")
-        #expect(result?.category == .skill)
+        #expect(result == nil)
     }
 
     @Test("Parse tengu_agent_tool_selected extracts agent_type as .agent")
@@ -93,7 +92,7 @@ struct TelemetryReaderTests {
             {"event_type":"ClaudeCodeInternalEvent","event_data":{"event_name":"tengu_tool_use_success","additional_metadata":"{\\"toolName\\":\\"Edit\\",\\"isMcp\\":false}"}}
             """,
             """
-            {"event_type":"ClaudeCodeInternalEvent","event_data":{"event_name":"tengu_skill_loaded","additional_metadata":"{\\"skill_name\\":\\"commit\\"}"}}
+            {"event_type":"ClaudeCodeInternalEvent","event_data":{"event_name":"tengu_agent_tool_selected","additional_metadata":"{\\"agent_type\\":\\"Explore\\"}"}}
             """,
             """
             {"event_type":"ClaudeCodeInternalEvent","event_data":{"event_name":"tengu_exit","additional_metadata":"{\\"last_session_cost\\":0}"}}
@@ -113,9 +112,9 @@ struct TelemetryReaderTests {
         let edit = snapshot.entries.first { $0.name == "Edit" }
         #expect(edit?.count == 1)
 
-        let commit = snapshot.entries.first { $0.name == "commit" }
-        #expect(commit?.count == 1)
-        #expect(commit?.category == .skill)
+        let explore = snapshot.entries.first { $0.name == "Explore" }
+        #expect(explore?.count == 1)
+        #expect(explore?.category == .agent)
     }
 
     @Test("readToolUsage returns empty for empty directory")
