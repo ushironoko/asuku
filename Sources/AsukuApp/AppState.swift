@@ -23,7 +23,7 @@ final class AppState {
 
     // Tool usage monitoring
     var toolUsageSnapshot: ToolUsageSnapshot = .empty
-    var realTimeToolCounts: [String: ToolCount] = [:]
+    var realTimeToolCounts: [String: ToolCount] = ToolCountStore.load()
 
     private let maxRecentEvents = 50
 
@@ -103,5 +103,6 @@ final class AppState {
             count: (existing?.count ?? 0) + 1,
             category: existing?.category ?? category
         )
+        ToolCountStore.save(realTimeToolCounts)
     }
 }

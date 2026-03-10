@@ -50,6 +50,42 @@ public struct ToolCount: Sendable, Equatable {
     }
 }
 
+// MARK: - Persistence
+
+public enum ToolCountStore {
+    private static let key = "toolUsage.realTimeCounts"
+
+    public static func load(from defaults: UserDefaults = .standard) -> [String: ToolCount] {
+        guard let data = defaults.data(forKey: key),
+            let stored = try? JSONDecoder().decode([String: StoredToolCount].self, from: data)
+        else { return [:] }
+        var result: [String: ToolCount] = [:]
+        for (name, stored) in stored {
+            if let category = ToolCategory(rawValue: stored.category) {
+                result[name] = ToolCount(count: stored.count, category: category)
+            }
+        }
+        return result
+    }
+
+    public static func save(
+        _ counts: [String: ToolCount], to defaults: UserDefaults = .standard
+    ) {
+        var stored: [String: StoredToolCount] = [:]
+        for (name, tc) in counts {
+            stored[name] = StoredToolCount(count: tc.count, category: tc.category.rawValue)
+        }
+        if let data = try? JSONEncoder().encode(stored) {
+            defaults.set(data, forKey: key)
+        }
+    }
+
+    private struct StoredToolCount: Codable {
+        let count: Int
+        let category: String
+    }
+}
+
 // MARK: - Merger
 
 public enum ToolUsageMerger {
