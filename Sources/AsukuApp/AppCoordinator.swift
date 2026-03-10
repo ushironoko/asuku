@@ -221,6 +221,7 @@ final class AppCoordinator {
         event: PermissionRequestEvent, responder: any IPCResponding
     ) async {
         print("[AppCoordinator] Received permission request: \(event.toolName) (\(event.requestId))")
+        appState.trackToolUse(toolName: event.toolName)
         await pendingManager.addRequest(
             event: event,
             responder: responder,
@@ -266,9 +267,11 @@ final class AppCoordinator {
         Task.detached {
             let plugins = ConfigReader.readEnabledPlugins()
             let history = ConfigReader.readSessionHistory()
+            let toolUsage = TelemetryReader.readToolUsage()
             await MainActor.run {
                 appState.updatePlugins(plugins)
                 appState.updateSessionHistory(history)
+                appState.updateToolUsage(toolUsage)
             }
         }
     }
