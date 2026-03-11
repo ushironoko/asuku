@@ -21,6 +21,10 @@ final class AppState {
     var enabledPlugins: [EnabledPlugin] = []
     var sessionHistory: [SessionHistoryEntry] = []
 
+    // Tool usage monitoring
+    var toolUsageSnapshot: ToolUsageSnapshot = .empty
+    var realTimeToolCounts: [String: ToolCount] = ToolCountStore.load()
+
     private let maxRecentEvents = 50
 
     init(
@@ -87,5 +91,23 @@ final class AppState {
 
     func updateSessionHistory(_ history: [SessionHistoryEntry]) {
         sessionHistory = history
+    }
+
+    func updateToolUsage(_ snapshot: ToolUsageSnapshot) {
+        toolUsageSnapshot = snapshot
+        // Reset real-time counts when telemetry is refreshed to avoid double counting.
+        // Telemetry already includes successfully executed tools, so we only need
+        // realTimeToolCounts for tracking between telemetry refreshes.
+        realTimeToolCounts = [:]
+        ToolCountStore.save([:])
+    }
+
+    func trackToolUse(toolName: String, category: ToolCategory = .tool) {
+        let existing = realTimeToolCounts[toolName]
+        realTimeToolCounts[toolName] = ToolCount(
+            count: (existing?.count ?? 0) + 1,
+            category: existing?.category ?? category
+        )
+        ToolCountStore.save(realTimeToolCounts)
     }
 }

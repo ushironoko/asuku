@@ -20,6 +20,13 @@ struct DashboardView: View {
             HistoryTab(entries: appState.sessionHistory)
                 .tabItem { Label("History", systemImage: "clock") }
                 .tag("history")
+
+            UsageTab(
+                snapshot: appState.toolUsageSnapshot,
+                realTimeCounts: appState.realTimeToolCounts
+            )
+            .tabItem { Label("Usage", systemImage: "chart.bar") }
+            .tag("usage")
         }
         .frame(minWidth: 500, minHeight: 400)
     }
