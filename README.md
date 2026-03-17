@@ -27,10 +27,13 @@ When Claude Code needs permission to run a tool (Bash, Write, Edit, etc.), asuku
 
 ```bash
 brew tap ushironoko/tap
-brew install --no-quarantine --cask asuku
+brew install --cask asuku
 ```
 
-> **Note:** `--no-quarantine` is needed because the app is ad-hoc signed (not notarized by Apple). Without it, macOS Gatekeeper may block the app.
+> **Note:** asuku is ad-hoc signed (not notarized by Apple). If macOS Gatekeeper blocks the app on first launch, run:
+> ```bash
+> xattr -cr /Applications/asuku.app
+> ```
 
 ### 2. Install the hook
 
