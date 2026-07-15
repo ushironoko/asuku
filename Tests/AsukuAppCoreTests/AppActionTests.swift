@@ -69,6 +69,7 @@ struct AppActionTests {
             .resolveRequest(requestId: "r2", decision: .deny),
             .ntfyConfigChanged,
             .timeoutConfigChanged,
+            .refreshQuotaCost,
             .stop,
         ]
 
@@ -81,6 +82,8 @@ struct AppActionTests {
                 descriptions.append("ntfyConfigChanged")
             case .timeoutConfigChanged:
                 descriptions.append("timeoutConfigChanged")
+            case .refreshQuotaCost:
+                descriptions.append("refreshQuotaCost")
             case .stop:
                 descriptions.append("stop")
             }
@@ -92,6 +95,7 @@ struct AppActionTests {
             resolve(r2, deny)
             ntfyConfigChanged
             timeoutConfigChanged
+            refreshQuotaCost
             stop
             """
         }
@@ -132,6 +136,12 @@ struct AppActionTests {
         assertInlineSnapshot(of: AppAction.timeoutConfigChanged, as: .dump) {
             """
             - AppAction.timeoutConfigChanged
+
+            """
+        }
+        assertInlineSnapshot(of: AppAction.refreshQuotaCost, as: .dump) {
+            """
+            - AppAction.refreshQuotaCost
 
             """
         }

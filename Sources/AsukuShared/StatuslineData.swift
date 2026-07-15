@@ -15,6 +15,8 @@ public struct StatuslineData: Codable, Sendable, Equatable {
     public let contextWindow: ContextWindowInfo?
     public let exceedsContextLimit: Bool?
     public let agent: AgentInfo?
+    /// Account-wide 5h/7d subscription rate limits (Claude.ai Pro/Max), when present.
+    public let rateLimits: RateLimits?
 
     private enum CodingKeys: String, CodingKey {
         case cwd
@@ -24,6 +26,7 @@ public struct StatuslineData: Codable, Sendable, Equatable {
         case contextWindow = "context_window"
         case exceedsContextLimit = "exceeds_200k_tokens"
         case agent
+        case rateLimits = "rate_limits"
     }
 
     public init(
@@ -36,7 +39,8 @@ public struct StatuslineData: Codable, Sendable, Equatable {
         cost: CostInfo? = nil,
         contextWindow: ContextWindowInfo? = nil,
         exceedsContextLimit: Bool? = nil,
-        agent: AgentInfo? = nil
+        agent: AgentInfo? = nil,
+        rateLimits: RateLimits? = nil
     ) {
         self.cwd = cwd
         self.sessionId = sessionId
@@ -48,6 +52,7 @@ public struct StatuslineData: Codable, Sendable, Equatable {
         self.contextWindow = contextWindow
         self.exceedsContextLimit = exceedsContextLimit
         self.agent = agent
+        self.rateLimits = rateLimits
     }
 }
 
@@ -176,6 +181,66 @@ public struct AgentInfo: Codable, Sendable, Equatable {
 
     public init(name: String? = nil) {
         self.name = name
+    }
+}
+
+// MARK: - Rate Limits (subscription quota)
+
+/// Account-wide subscription rate limits carried in the Claude Code statusline JSON.
+/// Decoding is deliberately tolerant: a malformed subtree yields nil fields rather than
+/// failing the whole statusline decode (so cost/model/etc. survive a bad `rate_limits`).
+public struct RateLimits: Codable, Sendable, Equatable {
+    public let fiveHour: RateLimitWindow?
+    public let sevenDay: RateLimitWindow?
+
+    private enum CodingKeys: String, CodingKey {
+        case fiveHour = "five_hour"
+        case sevenDay = "seven_day"
+    }
+
+    public init(fiveHour: RateLimitWindow? = nil, sevenDay: RateLimitWindow? = nil) {
+        self.fiveHour = fiveHour
+        self.sevenDay = sevenDay
+    }
+
+    public init(from decoder: Decoder) throws {
+        // If `rate_limits` is present but not an object, degrade to empty rather than throwing.
+        guard let container = try? decoder.container(keyedBy: CodingKeys.self) else {
+            self.fiveHour = nil
+            self.sevenDay = nil
+            return
+        }
+        self.fiveHour = (try? container.decodeIfPresent(RateLimitWindow.self, forKey: .fiveHour)) ?? nil
+        self.sevenDay = (try? container.decodeIfPresent(RateLimitWindow.self, forKey: .sevenDay)) ?? nil
+    }
+}
+
+public struct RateLimitWindow: Codable, Sendable, Equatable {
+    /// Consumed percentage for this window (0...100 in practice), when reported.
+    public let usedPercentage: Double?
+    /// Epoch seconds when this window resets, when reported.
+    public let resetsAt: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case usedPercentage = "used_percentage"
+        case resetsAt = "resets_at"
+    }
+
+    public init(usedPercentage: Double? = nil, resetsAt: Double? = nil) {
+        self.usedPercentage = usedPercentage
+        self.resetsAt = resetsAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        guard let container = try? decoder.container(keyedBy: CodingKeys.self) else {
+            self.usedPercentage = nil
+            self.resetsAt = nil
+            return
+        }
+        // Tolerant: a wrong-typed leaf (e.g. a string) decodes to nil instead of throwing.
+        // An integer JSON number still decodes to Double.
+        self.usedPercentage = (try? container.decodeIfPresent(Double.self, forKey: .usedPercentage)) ?? nil
+        self.resetsAt = (try? container.decodeIfPresent(Double.self, forKey: .resetsAt)) ?? nil
     }
 }
 

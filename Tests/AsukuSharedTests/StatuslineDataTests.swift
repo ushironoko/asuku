@@ -686,6 +686,7 @@ struct StatuslineDataTests {
                   ▿ some: ModelInfo
                     - displayName: Optional<String>.none
                     - id: "opus"
+                - rateLimits: Optional<RateLimits>.none
                 - sessionId: Optional<String>.none
                 - transcriptPath: Optional<String>.none
                 - version: Optional<String>.none

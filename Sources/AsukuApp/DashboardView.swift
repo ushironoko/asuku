@@ -5,6 +5,7 @@ import SwiftUI
 
 struct DashboardView: View {
     let appState: AppState
+    let dispatch: @MainActor (AppAction) -> Void
     @State private var selectedTab = "sessions"
 
     var body: some View {
@@ -27,6 +28,15 @@ struct DashboardView: View {
             )
             .tabItem { Label("Usage", systemImage: "chart.bar") }
             .tag("usage")
+
+            QuotaTab(
+                claude: appState.claudeQuota,
+                codex: appState.codexQuota,
+                costEstimate: appState.claudeCostEstimate,
+                dispatch: dispatch
+            )
+            .tabItem { Label("Quota", systemImage: "gauge") }
+            .tag("quota")
         }
         .frame(minWidth: 500, minHeight: 400)
     }

@@ -57,7 +57,8 @@ let package = Package(
                 "AsukuAppCore",
                 .product(name: "InlineSnapshotTesting", package: "swift-snapshot-testing"),
             ],
-            path: "Tests/AsukuAppCoreTests"
+            path: "Tests/AsukuAppCoreTests",
+            resources: [.copy("Fixtures")]
         ),
         .testTarget(
             name: "AsukuHookTests",
