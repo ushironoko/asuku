@@ -32,6 +32,13 @@ struct MenuBarView: View {
                 Divider()
             }
 
+            // Rate limits (account-wide quota), shown above pending requests
+            if appState.claudeQuota.usage != nil || appState.codexQuota.usage != nil {
+                MenuBarQuotaCompactView(observation: appState.claudeQuota)
+                MenuBarQuotaCompactView(observation: appState.codexQuota)
+                Divider()
+            }
+
             // Pending requests
             if appState.pendingRequests.isEmpty {
                 Text("No pending requests")

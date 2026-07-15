@@ -348,6 +348,7 @@ struct SessionStatusTests {
                 - cwd: Optional<String>.none
                 - exceedsContextLimit: Optional<Bool>.none
                 - model: Optional<ModelInfo>.none
+                - rateLimits: Optional<RateLimits>.none
                 - sessionId: Optional<String>.none
                 - transcriptPath: Optional<String>.none
                 - version: Optional<String>.none
@@ -410,6 +411,7 @@ struct SessionStatusTests {
                     ▿ displayName: Optional<String>
                       - some: "Opus 4.6"
                     - id: "claude-opus-4-6"
+                - rateLimits: Optional<RateLimits>.none
                 ▿ sessionId: Optional<String>
                   - some: "sess-snap"
                 - transcriptPath: Optional<String>.none

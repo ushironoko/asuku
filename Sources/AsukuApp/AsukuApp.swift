@@ -13,10 +13,17 @@ struct AsukuApp: App {
         MenuBarExtra {
             MenuBarView(appState: appState, dispatch: coordinator.dispatch)
         } label: {
-            MenuBarIcon(
-                hasPending: !appState.pendingRequests.isEmpty,
-                contextPressure: contextPressure
-            )
+            HStack(spacing: 4) {
+                MenuBarIcon(
+                    hasPending: !appState.pendingRequests.isEmpty,
+                    contextPressure: contextPressure
+                )
+                MenuBarQuotaLabel(
+                    percent: appState.menuBarQuotaPercent,
+                    level: appState.menuBarQuotaLevel,
+                    isStale: appState.menuBarQuotaIsStale
+                )
+            }
         }
         .menuBarExtraStyle(.window)
 
@@ -27,7 +34,7 @@ struct AsukuApp: App {
         .defaultPosition(.center)
 
         Window("asuku Dashboard", id: "dashboard") {
-            DashboardView(appState: appState)
+            DashboardView(appState: appState, dispatch: coordinator.dispatch)
         }
         .windowResizability(.contentMinSize)
         .defaultPosition(.center)

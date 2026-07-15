@@ -6,5 +6,6 @@ public enum AppAction: Sendable, Equatable {
     case resolveRequest(requestId: String, decision: PermissionDecision)
     case ntfyConfigChanged
     case timeoutConfigChanged
+    case refreshQuotaCost
     case stop
 }

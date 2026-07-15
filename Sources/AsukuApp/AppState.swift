@@ -25,6 +25,11 @@ final class AppState {
     var toolUsageSnapshot: ToolUsageSnapshot = .empty
     var realTimeToolCounts: [String: ToolCount] = ToolCountStore.load()
 
+    // Quota monitoring (Claude via statusline IPC; Codex + historical cost via QuotaService)
+    var claudeQuota: QuotaObservation = .neverObserved(.claude)
+    var codexQuota: QuotaObservation = .neverObserved(.codex)
+    var claudeCostEstimate: CostEstimate?
+
     private let maxRecentEvents = 50
 
     init(
@@ -83,6 +88,77 @@ final class AppState {
                 )
             }
         }
+
+        // Recompute the account-wide Claude quota from all active sessions' statuslines.
+        // A statusline without rate_limits does not erase a previously observed value.
+        let sessions = activeSessions.map {
+            QuotaSelection.SessionStatusline(statusline: $0.statusline, lastUpdated: $0.lastUpdated)
+        }
+        claudeQuota = QuotaSelection.selectAccountQuota(from: sessions, previous: claudeQuota, now: Date())
+    }
+
+    // MARK: - Quota (menu-bar summary derivations — bodies are Core pure functions)
+
+    /// Headline Claude quota % for the always-visible menu bar, or nil to hide it.
+    var menuBarQuotaPercent: Int? {
+        guard hasDisplayableClaudeQuota else { return nil }
+        return QuotaDisplay.menuBarPercent(claudeQuota.usage)
+    }
+
+    /// Level for color-coding the menu-bar %, or nil when hidden.
+    var menuBarQuotaLevel: UsageLevel? {
+        guard hasDisplayableClaudeQuota else { return nil }
+        return QuotaDisplay.menuBarLevel(claudeQuota.usage)
+    }
+
+    /// Whether the menu-bar % reflects a stale (last-known) value, so it can be dimmed.
+    var menuBarQuotaIsStale: Bool {
+        if case .stale = claudeQuota.state { return true }
+        return false
+    }
+
+    private var hasDisplayableClaudeQuota: Bool {
+        switch claudeQuota.state {
+        case .available, .stale: true
+        case .neverObserved, .unavailable, .error: false
+        }
+    }
+
+    // MARK: - Quota updates
+
+    func updateCodexQuota(_ incoming: QuotaObservation) {
+        codexQuota = QuotaMerge.merge(previous: codexQuota, incoming: incoming, now: Date())
+    }
+
+    func updateCostEstimate(_ estimate: CostEstimate?) {
+        // Only overwrite with a real value; a skipped/failed scan keeps the last estimate.
+        if let estimate { claudeCostEstimate = estimate }
+    }
+
+    /// Seed quota from the persisted snapshot on launch. Shown as `.stale` until first live observation.
+    func applyPersistedQuota(_ snapshot: QuotaSnapshot) {
+        if case .neverObserved = claudeQuota.state, let usage = snapshot.claude {
+            claudeQuota = QuotaObservation(
+                provider: .claude, state: .stale, usage: usage, observedAt: snapshot.claudeObservedAt
+            )
+        }
+        if case .neverObserved = codexQuota.state, let usage = snapshot.codex {
+            codexQuota = QuotaObservation(
+                provider: .codex, state: .stale, usage: usage, observedAt: snapshot.codexObservedAt
+            )
+        }
+        if claudeCostEstimate == nil { claudeCostEstimate = snapshot.costEstimate }
+    }
+
+    /// Assemble the current quota state into a persistable snapshot (low-sensitivity).
+    func currentQuotaSnapshot() -> QuotaSnapshot {
+        QuotaSnapshot(
+            claude: claudeQuota.usage,
+            claudeObservedAt: claudeQuota.observedAt,
+            codex: codexQuota.usage,
+            codexObservedAt: codexQuota.observedAt,
+            costEstimate: claudeCostEstimate
+        )
     }
 
     func updatePlugins(_ plugins: [EnabledPlugin]) {

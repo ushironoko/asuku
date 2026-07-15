@@ -15,6 +15,15 @@ final class AppCoordinator {
     private let statusThrottler = StatusThrottler()
     private var configRefreshTask: Task<Void, Never>?
 
+    // Quota: a dedicated actor drives bounded Codex/cost reads (kept off the fast config loop).
+    private let quotaService = QuotaService(
+        codexSessionsDir: QuotaService.defaultCodexSessionsDir(),
+        claudeProjectsDir: QuotaService.defaultClaudeProjectsDir()
+    )
+    private var quotaRefreshTask: Task<Void, Never>?
+    /// How often to poll Codex quota (bounded tail-scan) and re-run the throttled cost estimate.
+    private let quotaRefreshInterval: Duration = .seconds(120)
+
     init(appState: AppState) {
         self.appState = appState
         startIPCServer()
@@ -37,6 +46,8 @@ final class AppCoordinator {
             ntfyConfigChanged()
         case .timeoutConfigChanged:
             timeoutConfigChanged()
+        case .refreshQuotaCost:
+            Task { await refreshCostEstimate(force: true) }
         case .stop:
             stop()
         }
@@ -140,6 +151,47 @@ final class AppCoordinator {
                 self?.loadConfigInBackground(appState: stateRef)
             }
         }
+
+        await setupQuota()
+    }
+
+    // MARK: - Quota
+
+    private func setupQuota() async {
+        // Seed from the last persisted snapshot so the tab shows something (as `.stale`) immediately.
+        if let snapshot = await quotaService.loadPersistedSnapshot() {
+            appState.applyPersistedQuota(snapshot)
+        }
+
+        // Kick off an initial read, then poll on a bounded, single-flight cadence. Codex uses a
+        // tail-scan (few files); the historical cost estimate is throttled inside QuotaService.
+        await refreshCodexQuota()
+        await refreshCostEstimate(force: false)
+
+        quotaRefreshTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: self?.quotaRefreshInterval ?? .seconds(120))
+                guard let self else { return }
+                await self.refreshCodexQuota()
+                await self.refreshCostEstimate(force: false)
+            }
+        }
+    }
+
+    private func refreshCodexQuota() async {
+        let observation = await quotaService.refreshCodex(now: Date())
+        appState.updateCodexQuota(observation)
+        await persistQuota()
+    }
+
+    private func refreshCostEstimate(force: Bool) async {
+        let estimate = await quotaService.refreshCost(now: Date(), force: force)
+        appState.updateCostEstimate(estimate)
+        await persistQuota()
+    }
+
+    private func persistQuota() async {
+        await quotaService.persist(appState.currentQuotaSnapshot())
     }
 
     // MARK: - Timeout Config
@@ -260,6 +312,8 @@ final class AppCoordinator {
         stopWebhookServer()
         configRefreshTask?.cancel()
         configRefreshTask = nil
+        quotaRefreshTask?.cancel()
+        quotaRefreshTask = nil
         Task { await statusThrottler.stop() }
     }
 
