@@ -74,6 +74,16 @@ struct CodexRolloutParserTests {
         let tmp = NSTemporaryDirectory() + "asuku-codex-empty-\(UUID().uuidString)"
         #expect(CodexRolloutParser.latestUsage(sessionsDir: tmp, fs: fs) == nil)
     }
+
+    @Test("rollout files over the per-file byte cap are skipped")
+    func perFileByteCap() throws {
+        let fs = LocalFileSystem()
+        let tmp = NSTemporaryDirectory() + "asuku-codex-cap-\(UUID().uuidString)"
+        try fs.writeAtomically(try Fixture.data("codex-rollout-sample.jsonl"),
+                               to: tmp + "/2026/02/15/rollout.jsonl")
+        // 1-byte cap → the only rollout file is skipped, so nothing is found.
+        #expect(CodexRolloutParser.latestUsage(sessionsDir: tmp, fs: fs, maxFileBytes: 1) == nil)
+    }
 }
 
 @Suite("PricingCost")

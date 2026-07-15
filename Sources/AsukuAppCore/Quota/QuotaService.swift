@@ -96,6 +96,15 @@ public actor QuotaService {
         return result
     }
 
+    // MARK: - Lifecycle
+
+    /// Cancel any in-flight scans (called on app stop). The cost scan observes `Task.isCancelled`
+    /// and bails out promptly; the codex tail-scan is already tiny and finishes on its own.
+    public func cancelInFlight() {
+        costInFlight?.cancel()
+        codexInFlight?.cancel()
+    }
+
     // MARK: - Persistence (last-known snapshot)
 
     /// Persisted last-known quota (loaded on launch and shown as `.stale`). Never contains prompts.

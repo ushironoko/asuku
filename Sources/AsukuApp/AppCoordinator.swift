@@ -315,6 +315,7 @@ final class AppCoordinator {
         quotaRefreshTask?.cancel()
         quotaRefreshTask = nil
         Task { await statusThrottler.stop() }
+        Task { await quotaService.cancelInFlight() }
     }
 
     nonisolated private func loadConfigInBackground(appState: AppState) {

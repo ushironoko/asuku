@@ -79,11 +79,18 @@ public enum CodexRolloutParser {
     }
 
     /// Find the newest rollout file under `sessionsDir` that contains rate limits and parse it.
-    /// `maxFilesToScan` bounds how many candidate files (newest first) are read before giving up.
-    public static func latestUsage(sessionsDir: String, fs: FileSystem, maxFilesToScan: Int = 8) -> ProviderUsage? {
+    /// Bounded by `maxFilesToScan` (candidate files, newest first) and `maxFileBytes` (skip any
+    /// single rollout file larger than this) so the scan stays cheap on a large sessions tree.
+    public static func latestUsage(
+        sessionsDir: String,
+        fs: FileSystem,
+        maxFilesToScan: Int = 8,
+        maxFileBytes: UInt64 = 16 * 1024 * 1024
+    ) -> ProviderUsage? {
         var scanned = 0
         for path in fs.filesRecursively(under: sessionsDir, withSuffix: ".jsonl") { // newest first
             if scanned >= maxFilesToScan { break }
+            if let size = fs.fileSize(at: path), size > maxFileBytes { continue }
             scanned += 1
             if let data = try? fs.readData(at: path),
                let usage = latestRateLimits(fromRolloutJSONL: data) {
