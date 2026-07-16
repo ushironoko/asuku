@@ -71,6 +71,7 @@ struct AppActionTests {
             .timeoutConfigChanged,
             .refreshQuotaCost,
             .stop,
+            .quit,
         ]
 
         var descriptions: [String] = []
@@ -86,6 +87,8 @@ struct AppActionTests {
                 descriptions.append("refreshQuotaCost")
             case .stop:
                 descriptions.append("stop")
+            case .quit:
+                descriptions.append("quit")
             }
         }
 
@@ -97,6 +100,7 @@ struct AppActionTests {
             timeoutConfigChanged
             refreshQuotaCost
             stop
+            quit
             """
         }
     }

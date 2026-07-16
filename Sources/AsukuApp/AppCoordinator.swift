@@ -1,3 +1,4 @@
+import AppKit
 import AsukuAppCore
 import AsukuShared
 import Foundation
@@ -50,6 +51,8 @@ final class AppCoordinator {
             Task { await refreshCostEstimate(force: true) }
         case .stop:
             stop()
+        case .quit:
+            Task { @MainActor [weak self] in await self?.terminateGracefully() }
         }
     }
 
@@ -170,8 +173,12 @@ final class AppCoordinator {
 
         quotaRefreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: self?.quotaRefreshInterval ?? .seconds(120))
-                guard let self else { return }
+                do {
+                    try await Task.sleep(for: self?.quotaRefreshInterval ?? .seconds(120))
+                } catch {
+                    return // cancelled on stop() — do not run another refresh (which could spawn app-server)
+                }
+                guard let self, !Task.isCancelled else { return }
                 await self.refreshCodexQuota()
                 await self.refreshCostEstimate(force: false)
             }
@@ -179,7 +186,9 @@ final class AppCoordinator {
     }
 
     private func refreshCodexQuota() async {
-        let observation = await quotaService.refreshCodex(now: Date())
+        // Prefer the live account/rateLimits/read (account-wide, includes pi) when the user enables it.
+        let useAppServer = appState.codexAppServerConfig.isEnabled
+        let observation = await quotaService.refreshCodex(now: Date(), useAppServer: useAppServer)
         appState.updateCodexQuota(observation)
         await persistQuota()
     }
@@ -316,6 +325,17 @@ final class AppCoordinator {
         quotaRefreshTask = nil
         Task { await statusThrottler.stop() }
         Task { await quotaService.cancelInFlight() }
+    }
+
+    /// Graceful quit path (the "Quit asuku" button). Runs the normal teardown, then **awaits** the
+    /// Codex app-server subprocess teardown so its child is reaped before we exit, then terminates.
+    /// Bounded by `QuotaService.shutdown()` (stdin close → SIGTERM → 0.5s → SIGKILL → reap) so quit
+    /// cannot hang. Non-interactive quits (Cmd+Q, logout) bypass this, but the OS closes our stdin
+    /// pipe on exit and the child exits on EOF, so no persistent orphan remains either way.
+    private func terminateGracefully() async {
+        stop()
+        await quotaService.shutdown()
+        NSApplication.shared.terminate(nil)
     }
 
     nonisolated private func loadConfigInBackground(appState: AppState) {

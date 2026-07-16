@@ -10,11 +10,12 @@ public enum DataSource: String, Sendable, Codable, Hashable {
     case claudeStatusLine  // official (Claude Code statusLine rate_limits)
     case claudeJSONL       // local token/cost rollup
     case codexRollout      // local rollout rate_limits
+    case codexAppServer    // live account-wide rate_limits via `codex app-server` account/rateLimits/read
 
     public var provider: Provider {
         switch self {
         case .claudeStatusLine, .claudeJSONL: .claude
-        case .codexRollout: .codex
+        case .codexRollout, .codexAppServer: .codex
         }
     }
 }

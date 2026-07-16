@@ -14,12 +14,16 @@ public actor QuotaService {
     private let snapshotPath: String
     private let costThrottle: TimeInterval
     private let costBudget: QuotaReader.Budget
+    private let appServer: CodexAppServerRunning
 
     private var cachedCost: CostEstimate?
     private var costInFlight: Task<CostEstimate?, Never>?
 
     private var cachedCodexUsage: ProviderUsage?
     private var codexInFlight: Task<ProviderUsage?, Never>?
+    private var appServerInFlight: Task<Data?, Never>?
+    /// Set once on stop; blocks any further `codex app-server` spawn (a file read is still harmless).
+    private var isShutdown = false
 
     public init(
         fs: FileSystem = LocalFileSystem(),
@@ -28,7 +32,8 @@ public actor QuotaService {
         claudeProjectsDir: String,
         snapshotPath: String = QuotaService.defaultSnapshotPath(),
         costThrottle: TimeInterval = 15 * 60,
-        costBudget: QuotaReader.Budget = QuotaReader.Budget()
+        costBudget: QuotaReader.Budget = QuotaReader.Budget(),
+        appServer: CodexAppServerRunning = ProcessCodexAppServer()
     ) {
         self.fs = fs
         self.pricing = pricing
@@ -37,16 +42,32 @@ public actor QuotaService {
         self.snapshotPath = snapshotPath
         self.costThrottle = costThrottle
         self.costBudget = costBudget
+        self.appServer = appServer
     }
 
     // MARK: - Codex quota
 
     /// Refresh the Codex quota observation. Single-flight: concurrent callers await one scan.
-    public func refreshCodex(now: Date, staleAfter: TimeInterval = 15 * 60) async -> QuotaObservation {
-        let usage = await scanCodex()
-        guard let usage, usage.hasRateData else {
+    ///
+    /// When `useAppServer` is true, first try the live, account-wide `account/rateLimits/read`
+    /// (which includes usage from every client on the account, e.g. pi). If that is unavailable
+    /// (disabled, not logged in, binary missing, timeout), fall back to the offline rollout scan —
+    /// the sole path when `useAppServer` is false.
+    public func refreshCodex(
+        now: Date,
+        useAppServer: Bool = false,
+        staleAfter: TimeInterval = 15 * 60
+    ) async -> QuotaObservation {
+        if useAppServer, !isShutdown, let usage = await scanCodexAppServer(now: now) {
+            return observation(from: usage, now: now, staleAfter: staleAfter)
+        }
+        guard let usage = await scanCodex(), usage.hasRateData else {
             return QuotaObservation(provider: .codex, state: .unavailable)
         }
+        return observation(from: usage, now: now, staleAfter: staleAfter)
+    }
+
+    private func observation(from usage: ProviderUsage, now: Date, staleAfter: TimeInterval) -> QuotaObservation {
         let observedAt = usage.observedAt ?? now
         return QuotaObservation(
             provider: .codex,
@@ -54,6 +75,23 @@ public actor QuotaService {
             usage: usage,
             observedAt: observedAt
         )
+    }
+
+    /// Read the live rate limits via `codex app-server`, off the actor's executor so the (up to
+    /// ~8s) conversation never blocks it. Single-flight: concurrent callers coalesce onto one read
+    /// and each parses the shared bytes with its own `now`.
+    private func scanCodexAppServer(now: Date) async -> ProviderUsage? {
+        if let inFlight = appServerInFlight {
+            guard let data = await inFlight.value else { return nil }
+            return CodexAppServerParser.parse(data, now: now)
+        }
+        let server = self.appServer
+        let task = Task<Data?, Never>.detached(priority: .utility) { await server.readRateLimits() }
+        appServerInFlight = task
+        let data = await task.value
+        appServerInFlight = nil
+        guard let data else { return nil }
+        return CodexAppServerParser.parse(data, now: now)
     }
 
     private func scanCodex() async -> ProviderUsage? {
@@ -98,11 +136,31 @@ public actor QuotaService {
 
     // MARK: - Lifecycle
 
-    /// Cancel any in-flight scans (called on app stop). The cost scan observes `Task.isCancelled`
-    /// and bails out promptly; the codex tail-scan is already tiny and finishes on its own.
+    /// Cancel any in-flight scans (called on app stop) and refuse further `codex app-server` spawns.
+    /// The cost scan observes `Task.isCancelled` and bails out promptly; the codex tail-scan is tiny
+    /// and finishes on its own; cancelling the app-server task tears down its subprocess.
+    ///
+    /// This does NOT await the teardown — use `shutdown()` when the caller must know the subprocess
+    /// is reaped before it proceeds (e.g. a graceful app quit).
     public func cancelInFlight() {
+        isShutdown = true
         costInFlight?.cancel()
         codexInFlight?.cancel()
+        appServerInFlight?.cancel()
+    }
+
+    /// Graceful shutdown: cancel in-flight work and **await** the `codex app-server` subprocess
+    /// teardown, so its child is reaped before the caller (app quit) proceeds. Bounded by
+    /// `ProcessLineDuplex.shutdown()` (stdin close → SIGTERM → 0.5s → SIGKILL → reap), so it cannot
+    /// hang the caller. A no-op beyond setting the guard when no read is in flight (the subprocess
+    /// only exists during a read — spawn-and-exit per poll).
+    public func shutdown() async {
+        isShutdown = true
+        costInFlight?.cancel()
+        codexInFlight?.cancel()
+        let inFlight = appServerInFlight
+        inFlight?.cancel()
+        _ = await inFlight?.value
     }
 
     // MARK: - Persistence (last-known snapshot)

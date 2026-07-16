@@ -16,6 +16,9 @@ public struct ProviderUsage: Sendable, Codable, Equatable, Hashable {
     public var source: DataSource?
     /// When the underlying data was produced by the provider/CLI (for freshness display).
     public var observedAt: Date?
+    /// Number of available Codex rate-limit reset credits, when the source exposes it
+    /// (`codex app-server` `rateLimitResetCredits.availableCount`). Nil for sources that don't.
+    public var resetCreditsAvailable: Int?
 
     public init(
         provider: Provider,
@@ -24,7 +27,8 @@ public struct ProviderUsage: Sendable, Codable, Equatable, Hashable {
         planType: String? = nil,
         costUSD: Double? = nil,
         source: DataSource? = nil,
-        observedAt: Date? = nil
+        observedAt: Date? = nil,
+        resetCreditsAvailable: Int? = nil
     ) {
         self.provider = provider
         self.windows = windows
@@ -33,6 +37,7 @@ public struct ProviderUsage: Sendable, Codable, Equatable, Hashable {
         self.costUSD = costUSD
         self.source = source
         self.observedAt = observedAt
+        self.resetCreditsAvailable = resetCreditsAvailable
     }
 
     public func window(_ kind: RateWindow.Kind) -> RateWindow? {

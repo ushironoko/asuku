@@ -5,8 +5,11 @@
 import Foundation
 
 /// Parses Codex rollout logs (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`). The newest file's
-/// last `token_count` event carries authoritative 5h/weekly rate limits — obtained offline with
-/// zero token cost (never spawn `codex app-server`, which drains the user's tokens).
+/// last `token_count` event carries authoritative 5h/weekly rate limits, obtained offline with zero
+/// token cost and no subprocess. This is the *fallback* source: it only updates when the Codex CLI
+/// itself runs a turn. The live, account-wide value (which also reflects usage driven through other
+/// clients, e.g. pi) comes from `CodexAppServerParser` via `account/rateLimits/read` — also
+/// zero-token, since only a `turn/*` spends tokens and neither path ever sends one.
 public enum CodexRolloutParser {
     private struct Line: Decodable {
         struct Payload: Decodable {
