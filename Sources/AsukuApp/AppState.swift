@@ -15,6 +15,7 @@ final class AppState {
     var notificationPermissionGranted = false
     var ntfyConfig: NtfyConfig
     var timeoutConfig: TimeoutConfig
+    var codexAppServerConfig: CodexAppServerConfig
 
     // Status monitoring
     var activeSessions: [SessionStatus] = []
@@ -34,10 +35,12 @@ final class AppState {
 
     init(
         ntfyConfig: NtfyConfig = NtfyConfigStore.load(),
-        timeoutConfig: TimeoutConfig = TimeoutConfigStore.load()
+        timeoutConfig: TimeoutConfig = TimeoutConfigStore.load(),
+        codexAppServerConfig: CodexAppServerConfig = CodexAppServerConfigStore.load()
     ) {
         self.ntfyConfig = ntfyConfig
         self.timeoutConfig = timeoutConfig
+        self.codexAppServerConfig = codexAppServerConfig
     }
 
     func addRecentEvent(toolName: String, kind: RecentEvent.Kind, sessionId: String) {
@@ -62,6 +65,11 @@ final class AppState {
     func updateTimeoutConfig(_ config: TimeoutConfig) {
         timeoutConfig = config
         TimeoutConfigStore.save(config)
+    }
+
+    func updateCodexAppServerConfig(_ config: CodexAppServerConfig) {
+        codexAppServerConfig = config
+        CodexAppServerConfigStore.save(config)
     }
 
     // MARK: - Status Monitoring

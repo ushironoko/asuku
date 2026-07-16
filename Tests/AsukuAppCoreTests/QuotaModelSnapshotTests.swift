@@ -43,6 +43,7 @@ struct QuotaModelSnapshotTests {
               - observedAt: Optional<Date>.none
               - planType: Optional<String>.none
               - provider: Provider.claude
+              - resetCreditsAvailable: Optional<Int>.none
               ▿ source: Optional<DataSource>
                 - some: DataSource.claudeStatusLine
               ▿ windows: 1 element
@@ -85,6 +86,7 @@ struct QuotaModelSnapshotTests {
                   - observedAt: Optional<Date>.none
                   - planType: Optional<String>.none
                   - provider: Provider.claude
+                  - resetCreditsAvailable: Optional<Int>.none
                   ▿ source: Optional<DataSource>
                     - some: DataSource.claudeStatusLine
                   ▿ windows: 1 element

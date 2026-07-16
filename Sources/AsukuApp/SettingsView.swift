@@ -233,6 +233,24 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Codex Quota") {
+                Toggle(
+                    "Show live Codex rate limits (via codex app-server)",
+                    isOn: $appState.codexAppServerConfig.isEnabled
+                )
+                .onChange(of: appState.codexAppServerConfig.isEnabled) { _, _ in
+                    appState.updateCodexAppServerConfig(appState.codexAppServerConfig)
+                }
+
+                Text(
+                    appState.codexAppServerConfig.isEnabled
+                        ? "Reads account-wide usage on demand, so Codex usage driven through other tools (e.g. pi) is included. Falls back to ~/.codex/sessions when Codex is signed out or unavailable. No tokens are spent."
+                        : "Codex quota reads only from ~/.codex/sessions logs, which update when the Codex CLI runs a turn."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
             Section("Server") {
                 HStack {
                     Text("Status")

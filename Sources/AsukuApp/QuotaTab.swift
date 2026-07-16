@@ -68,6 +68,14 @@ private struct ProviderSection: View {
                     Text(String(format: "Current session (measured): $%.4f", cost))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
+                // Only surface the reset-credit count from a fresh app-server read — a stale value
+                // would present a fast-changing number as if it were still authoritative.
+                if observation.state == .available,
+                   usage.source == .codexAppServer,
+                   let resets = usage.resetCreditsAvailable {
+                    Text("Rate-limit reset credits: \(resets)")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             } else {
                 Text(emptyText)
                     .font(.caption)

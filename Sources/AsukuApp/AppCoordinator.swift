@@ -170,8 +170,12 @@ final class AppCoordinator {
 
         quotaRefreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: self?.quotaRefreshInterval ?? .seconds(120))
-                guard let self else { return }
+                do {
+                    try await Task.sleep(for: self?.quotaRefreshInterval ?? .seconds(120))
+                } catch {
+                    return // cancelled on stop() — do not run another refresh (which could spawn app-server)
+                }
+                guard let self, !Task.isCancelled else { return }
                 await self.refreshCodexQuota()
                 await self.refreshCostEstimate(force: false)
             }
@@ -179,7 +183,9 @@ final class AppCoordinator {
     }
 
     private func refreshCodexQuota() async {
-        let observation = await quotaService.refreshCodex(now: Date())
+        // Prefer the live account/rateLimits/read (account-wide, includes pi) when the user enables it.
+        let useAppServer = appState.codexAppServerConfig.isEnabled
+        let observation = await quotaService.refreshCodex(now: Date(), useAppServer: useAppServer)
         appState.updateCodexQuota(observation)
         await persistQuota()
     }

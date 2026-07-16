@@ -3,6 +3,21 @@ import Testing
 
 @testable import AsukuAppCore
 
+/// A `CodexAppServerRunning` test double: returns a fixed payload (or nil) and counts calls.
+private actor FakeAppServer: CodexAppServerRunning {
+    private let response: Data?
+    private var callCount = 0
+
+    init(response: Data?) { self.response = response }
+
+    func readRateLimits() async -> Data? {
+        callCount += 1
+        return response
+    }
+
+    func calls() -> Int { callCount }
+}
+
 @Suite("QuotaService")
 struct QuotaServiceTests {
     private let fs = LocalFileSystem()
@@ -12,14 +27,20 @@ struct QuotaServiceTests {
         NSTemporaryDirectory() + "asuku-svc-\(UUID().uuidString)"
     }
 
-    private func makeService(codex: String, projects: String, snapshot: String) -> QuotaService {
+    private func makeService(
+        codex: String,
+        projects: String,
+        snapshot: String,
+        appServer: CodexAppServerRunning = FakeAppServer(response: nil)
+    ) -> QuotaService {
         QuotaService(
             fs: fs,
             codexSessionsDir: codex,
             claudeProjectsDir: projects,
             snapshotPath: snapshot,
             costThrottle: 15 * 60,
-            costBudget: QuotaReader.Budget()
+            costBudget: QuotaReader.Budget(),
+            appServer: appServer
         )
     }
 
@@ -63,6 +84,95 @@ struct QuotaServiceTests {
         let service = makeService(codex: tempDir(), projects: tempDir(), snapshot: tempDir() + "/q.json")
         let observation = await service.refreshCodex(now: now)
         #expect(observation.state == .unavailable)
+    }
+
+    // MARK: - app-server preference / fallback
+
+    /// A rate-limits `result` payload whose weekly window resets in the future (so it reads fresh).
+    private func appServerResult(usedPercent: Int, resetCredits: Int) -> Data {
+        let resetsAt = Int(now.timeIntervalSince1970) + 3600
+        return Data(#"""
+        {"rateLimits":{"primary":{"usedPercent":\#(usedPercent),"windowDurationMins":10080,"resetsAt":\#(resetsAt)}},"rateLimitResetCredits":{"availableCount":\#(resetCredits)}}
+        """#.utf8)
+    }
+
+    @Test("useAppServer true → adopts the live app-server value over rollout")
+    func appServerAdopted() async throws {
+        let codex = tempDir()
+        // A rollout also exists; the app-server value must win.
+        try fs.writeAtomically(try Fixture.data("codex-rollout-sample.jsonl"),
+                               to: codex + "/2026/02/15/rollout.jsonl")
+        let fake = FakeAppServer(response: appServerResult(usedPercent: 55, resetCredits: 3))
+        let service = makeService(codex: codex, projects: tempDir(), snapshot: tempDir() + "/q.json", appServer: fake)
+
+        let obs = await service.refreshCodex(now: now, useAppServer: true)
+        #expect(obs.state == .available)
+        #expect(obs.usage?.source == .codexAppServer)
+        #expect(obs.usage?.window(.sevenDay)?.usedPercent == 55)
+        #expect(obs.usage?.resetCreditsAvailable == 3)
+        #expect(await fake.calls() == 1)
+    }
+
+    @Test("useAppServer true but app-server unavailable → falls back to rollout")
+    func fallbackToRollout() async throws {
+        let codex = tempDir()
+        try fs.writeAtomically(try Fixture.data("codex-rollout-sample.jsonl"),
+                               to: codex + "/2026/02/15/rollout.jsonl")
+        let fake = FakeAppServer(response: nil) // e.g. not logged in / timed out
+        let service = makeService(codex: codex, projects: tempDir(), snapshot: tempDir() + "/q.json", appServer: fake)
+
+        let freshNow = try #require(TimeNormalization.date(fromISO8601: "2026-02-15T15:43:00Z"))
+        let obs = await service.refreshCodex(now: freshNow, useAppServer: true)
+        #expect(obs.usage?.source == .codexRollout)
+        #expect(obs.usage?.window(.fiveHour)?.usedPercent == 10.0)
+        #expect(await fake.calls() == 1) // it was attempted before falling back
+    }
+
+    @Test("useAppServer false → app-server is never called, rollout is used")
+    func appServerNotCalledWhenDisabled() async throws {
+        let codex = tempDir()
+        try fs.writeAtomically(try Fixture.data("codex-rollout-sample.jsonl"),
+                               to: codex + "/2026/02/15/rollout.jsonl")
+        let fake = FakeAppServer(response: appServerResult(usedPercent: 99, resetCredits: 1))
+        let service = makeService(codex: codex, projects: tempDir(), snapshot: tempDir() + "/q.json", appServer: fake)
+
+        let freshNow = try #require(TimeNormalization.date(fromISO8601: "2026-02-15T15:43:00Z"))
+        let obs = await service.refreshCodex(now: freshNow, useAppServer: false)
+        #expect(obs.usage?.source == .codexRollout) // not the app-server's 99%
+        #expect(await fake.calls() == 0)
+    }
+
+    /// Live end-to-end through the production wiring (QuotaService → real ProcessCodexAppServer →
+    /// installed codex). Skipped unless ASUKU_LIVE_CODEX=1 (needs a logged-in codex).
+    @Test("live: QuotaService reads account-wide rate limits via the real app-server",
+          .enabled(if: ProcessInfo.processInfo.environment["ASUKU_LIVE_CODEX"] == "1"))
+    func liveQuotaServiceAppServer() async throws {
+        let service = QuotaService(
+            fs: fs,
+            codexSessionsDir: tempDir(),
+            claudeProjectsDir: tempDir(),
+            snapshotPath: tempDir() + "/q.json"
+            // default appServer: ProcessCodexAppServer()
+        )
+        let obs = await service.refreshCodex(now: Date(), useAppServer: true)
+        #expect(obs.usage?.source == .codexAppServer)
+        #expect(obs.usage?.provider == .codex)
+        #expect(!(obs.usage?.windows.isEmpty ?? true))
+    }
+
+    @Test("after shutdown, app-server is not spawned even when requested")
+    func noSpawnAfterShutdown() async throws {
+        let codex = tempDir()
+        try fs.writeAtomically(try Fixture.data("codex-rollout-sample.jsonl"),
+                               to: codex + "/2026/02/15/rollout.jsonl")
+        let fake = FakeAppServer(response: appServerResult(usedPercent: 55, resetCredits: 3))
+        let service = makeService(codex: codex, projects: tempDir(), snapshot: tempDir() + "/q.json", appServer: fake)
+
+        await service.cancelInFlight() // stop
+        let freshNow = try #require(TimeNormalization.date(fromISO8601: "2026-02-15T15:43:00Z"))
+        let obs = await service.refreshCodex(now: freshNow, useAppServer: true)
+        #expect(obs.usage?.source == .codexRollout)
+        #expect(await fake.calls() == 0)
     }
 
     @Test("persisted snapshot round-trips")

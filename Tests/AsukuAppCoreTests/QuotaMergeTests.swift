@@ -48,4 +48,43 @@ struct QuotaMergeTests {
         )
         #expect(result.state == .unavailable)
     }
+
+    @Test("newer incoming replaces an older held value")
+    func newerReplaces() {
+        let older = available(10, at: now.addingTimeInterval(-3600))
+        let newer = available(55, at: now)
+        let result = QuotaMerge.merge(previous: older, incoming: newer, now: now)
+        #expect(result.usage?.window(.fiveHour)?.usedPercent == 55)
+    }
+
+    @Test("older incoming does NOT overwrite a newer held value (stale rollout must not clobber live app-server)")
+    func olderDoesNotOverwrite() {
+        let liveAppServer = QuotaObservation(
+            provider: .codex,
+            state: .available,
+            usage: ProviderUsage(
+                provider: .codex,
+                windows: [RateWindow(kind: .sevenDay, usedPercent: 42)],
+                source: .codexAppServer,
+                observedAt: now,
+                resetCreditsAvailable: 4
+            ),
+            observedAt: now
+        )
+        let olderRollout = QuotaObservation(
+            provider: .codex,
+            state: .available,
+            usage: ProviderUsage(
+                provider: .codex,
+                windows: [RateWindow(kind: .sevenDay, usedPercent: 30)],
+                source: .codexRollout,
+                observedAt: now.addingTimeInterval(-3600)
+            ),
+            observedAt: now.addingTimeInterval(-3600)
+        )
+        let result = QuotaMerge.merge(previous: liveAppServer, incoming: olderRollout, now: now)
+        #expect(result.usage?.window(.sevenDay)?.usedPercent == 42)
+        #expect(result.usage?.source == .codexAppServer)
+        #expect(result.usage?.resetCreditsAvailable == 4)
+    }
 }
