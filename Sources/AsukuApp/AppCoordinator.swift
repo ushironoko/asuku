@@ -1,3 +1,4 @@
+import AppKit
 import AsukuAppCore
 import AsukuShared
 import Foundation
@@ -50,6 +51,8 @@ final class AppCoordinator {
             Task { await refreshCostEstimate(force: true) }
         case .stop:
             stop()
+        case .quit:
+            Task { @MainActor [weak self] in await self?.terminateGracefully() }
         }
     }
 
@@ -322,6 +325,17 @@ final class AppCoordinator {
         quotaRefreshTask = nil
         Task { await statusThrottler.stop() }
         Task { await quotaService.cancelInFlight() }
+    }
+
+    /// Graceful quit path (the "Quit asuku" button). Runs the normal teardown, then **awaits** the
+    /// Codex app-server subprocess teardown so its child is reaped before we exit, then terminates.
+    /// Bounded by `QuotaService.shutdown()` (stdin close → SIGTERM → 0.5s → SIGKILL → reap) so quit
+    /// cannot hang. Non-interactive quits (Cmd+Q, logout) bypass this, but the OS closes our stdin
+    /// pipe on exit and the child exits on EOF, so no persistent orphan remains either way.
+    private func terminateGracefully() async {
+        stop()
+        await quotaService.shutdown()
+        NSApplication.shared.terminate(nil)
     }
 
     nonisolated private func loadConfigInBackground(appState: AppState) {

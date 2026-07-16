@@ -115,8 +115,9 @@ struct MenuBarView: View {
             Divider()
 
             Button("Quit asuku") {
-                dispatch(.stop)
-                NSApplication.shared.terminate(nil)
+                // Graceful: the coordinator awaits the Codex app-server subprocess teardown, then
+                // terminates. (Terminating immediately here could leave the child briefly orphaned.)
+                dispatch(.quit)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)

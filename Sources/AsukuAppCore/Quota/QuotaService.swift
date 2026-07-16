@@ -139,11 +139,28 @@ public actor QuotaService {
     /// Cancel any in-flight scans (called on app stop) and refuse further `codex app-server` spawns.
     /// The cost scan observes `Task.isCancelled` and bails out promptly; the codex tail-scan is tiny
     /// and finishes on its own; cancelling the app-server task tears down its subprocess.
+    ///
+    /// This does NOT await the teardown — use `shutdown()` when the caller must know the subprocess
+    /// is reaped before it proceeds (e.g. a graceful app quit).
     public func cancelInFlight() {
         isShutdown = true
         costInFlight?.cancel()
         codexInFlight?.cancel()
         appServerInFlight?.cancel()
+    }
+
+    /// Graceful shutdown: cancel in-flight work and **await** the `codex app-server` subprocess
+    /// teardown, so its child is reaped before the caller (app quit) proceeds. Bounded by
+    /// `ProcessLineDuplex.shutdown()` (stdin close → SIGTERM → 0.5s → SIGKILL → reap), so it cannot
+    /// hang the caller. A no-op beyond setting the guard when no read is in flight (the subprocess
+    /// only exists during a read — spawn-and-exit per poll).
+    public func shutdown() async {
+        isShutdown = true
+        costInFlight?.cancel()
+        codexInFlight?.cancel()
+        let inFlight = appServerInFlight
+        inFlight?.cancel()
+        _ = await inFlight?.value
     }
 
     // MARK: - Persistence (last-known snapshot)

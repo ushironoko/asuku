@@ -18,6 +18,19 @@ private actor FakeAppServer: CodexAppServerRunning {
     func calls() -> Int { callCount }
 }
 
+/// Blocks in `readRateLimits` until cancelled, modelling a real read in flight during shutdown.
+private actor BlockingAppServer: CodexAppServerRunning {
+    private var callCount = 0
+
+    func readRateLimits() async -> Data? {
+        callCount += 1
+        try? await Task.sleep(for: .seconds(30)) // cancelled by shutdown()
+        return nil
+    }
+
+    func calls() -> Int { callCount }
+}
+
 @Suite("QuotaService")
 struct QuotaServiceTests {
     private let fs = LocalFileSystem()
@@ -158,6 +171,32 @@ struct QuotaServiceTests {
         #expect(obs.usage?.source == .codexAppServer)
         #expect(obs.usage?.provider == .codex)
         #expect(!(obs.usage?.windows.isEmpty ?? true))
+    }
+
+    @Test("shutdown() cancels and awaits an in-flight read promptly, then blocks further spawns")
+    func shutdownAwaitsInFlight() async throws {
+        let codex = tempDir()
+        try fs.writeAtomically(try Fixture.data("codex-rollout-sample.jsonl"),
+                               to: codex + "/2026/02/15/rollout.jsonl")
+        let blocking = BlockingAppServer()
+        let service = makeService(codex: codex, projects: tempDir(), snapshot: tempDir() + "/q.json", appServer: blocking)
+
+        // Kick off a read that would otherwise block for 30s.
+        async let inflight = service.refreshCodex(now: now, useAppServer: true)
+        try? await Task.sleep(for: .milliseconds(50)) // let it enter readRateLimits
+
+        // shutdown() must cancel the read and return promptly (not wait out the 30s sleep).
+        let start = ContinuousClock.now
+        await service.shutdown()
+        #expect(ContinuousClock.now - start < .seconds(2))
+
+        _ = await inflight
+        #expect(await blocking.calls() == 1)
+
+        // After shutdown, a further request must not spawn — it falls back to the rollout.
+        let after = await service.refreshCodex(now: now, useAppServer: true)
+        #expect(after.usage?.source == .codexRollout)
+        #expect(await blocking.calls() == 1)
     }
 
     @Test("after shutdown, app-server is not spawned even when requested")

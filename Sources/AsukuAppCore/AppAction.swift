@@ -8,4 +8,6 @@ public enum AppAction: Sendable, Equatable {
     case timeoutConfigChanged
     case refreshQuotaCost
     case stop
+    /// Graceful quit: await the Codex app-server subprocess teardown, then terminate the app.
+    case quit
 }
