@@ -6,6 +6,7 @@ import Foundation
 public struct RecentEvent: Identifiable, Sendable {
     public enum Kind: Sendable, Equatable {
         case permissionResponse(PermissionDecision)
+        case autoApproved
         case notification
         case timeout
     }
@@ -36,6 +37,8 @@ public struct RecentEvent: Identifiable, Sendable {
             return toolName
         case .permissionResponse(let decision):
             return "\(toolName) — \(decision == .allow ? "Allowed" : "Denied")"
+        case .autoApproved:
+            return "\(toolName) — Auto-approved"
         case .timeout:
             return "\(toolName) — Timed Out"
         }

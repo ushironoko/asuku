@@ -47,6 +47,8 @@ final class AppCoordinator {
             ntfyConfigChanged()
         case .timeoutConfigChanged:
             timeoutConfigChanged()
+        case .autoApproveConfigChanged:
+            Task { await autoApproveConfigChanged() }
         case .refreshQuotaCost:
             Task { await refreshCostEstimate(force: true) }
         case .stop:
@@ -212,6 +214,29 @@ final class AppCoordinator {
         }
     }
 
+    // MARK: - Auto Approve Config
+
+    private func autoApproveConfigChanged() async {
+        guard appState.autoApproveConfig.isEnabled else { return }
+
+        let resolvedRequests = await pendingManager.resolveAll(decision: .allow)
+        for request in resolvedRequests {
+            notificationManager.removeNotification(identifier: request.id)
+            appState.addRecentEvent(
+                toolName: request.event.toolName,
+                kind: .autoApproved,
+                sessionId: request.event.sessionId
+            )
+        }
+        await refreshPendingRequests()
+
+        if !resolvedRequests.isEmpty {
+            print(
+                "[AppCoordinator] Auto-approved \(resolvedRequests.count) pending permission request(s)"
+            )
+        }
+    }
+
     // MARK: - Webhook Server
 
     func ntfyConfigChanged() {
@@ -283,6 +308,18 @@ final class AppCoordinator {
     ) async {
         print("[AppCoordinator] Received permission request: \(event.toolName) (\(event.requestId))")
         appState.trackToolUse(toolName: event.toolName)
+
+        if appState.autoApproveConfig.shouldApprove(event) {
+            responder.send(IPCResponse(requestId: event.requestId, decision: .allow))
+            appState.addRecentEvent(
+                toolName: event.toolName,
+                kind: .autoApproved,
+                sessionId: event.sessionId
+            )
+            print("[AppCoordinator] Auto-approved permission request: \(event.requestId)")
+            return
+        }
+
         await pendingManager.addRequest(
             event: event,
             responder: responder,
@@ -290,10 +327,25 @@ final class AppCoordinator {
         )
         await refreshPendingRequests()
 
-        if let request = await pendingManager.getRequest(event.requestId) {
-            await notificationManager.showPermissionRequest(request)
-            await NtfyNotifier.sendPermissionRequest(request, config: appState.ntfyConfig)
+        guard let request = await notificationRequestIfStillPending(event: event) else {
+            notificationManager.removeNotification(identifier: event.requestId)
+            return
         }
+
+        await notificationManager.showPermissionRequest(request)
+
+        guard let currentRequest = await notificationRequestIfStillPending(event: event) else {
+            notificationManager.removeNotification(identifier: event.requestId)
+            return
+        }
+        await NtfyNotifier.sendPermissionRequest(currentRequest, config: appState.ntfyConfig)
+    }
+
+    private func notificationRequestIfStillPending(
+        event: PermissionRequestEvent
+    ) async -> PendingRequest? {
+        guard !appState.autoApproveConfig.shouldApprove(event) else { return nil }
+        return await pendingManager.getRequest(event.requestId)
     }
 
     private func handleNotification(event: NotificationEvent) async {

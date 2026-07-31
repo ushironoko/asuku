@@ -15,6 +15,7 @@ final class AppState {
     var notificationPermissionGranted = false
     var ntfyConfig: NtfyConfig
     var timeoutConfig: TimeoutConfig
+    var autoApproveConfig: AutoApproveConfig
     var codexAppServerConfig: CodexAppServerConfig
 
     // Status monitoring
@@ -36,10 +37,12 @@ final class AppState {
     init(
         ntfyConfig: NtfyConfig = NtfyConfigStore.load(),
         timeoutConfig: TimeoutConfig = TimeoutConfigStore.load(),
+        autoApproveConfig: AutoApproveConfig = AutoApproveConfigStore.load(),
         codexAppServerConfig: CodexAppServerConfig = CodexAppServerConfigStore.load()
     ) {
         self.ntfyConfig = ntfyConfig
         self.timeoutConfig = timeoutConfig
+        self.autoApproveConfig = autoApproveConfig
         self.codexAppServerConfig = codexAppServerConfig
     }
 
@@ -65,6 +68,11 @@ final class AppState {
     func updateTimeoutConfig(_ config: TimeoutConfig) {
         timeoutConfig = config
         TimeoutConfigStore.save(config)
+    }
+
+    func updateAutoApproveConfig(_ config: AutoApproveConfig) {
+        autoApproveConfig = config
+        AutoApproveConfigStore.save(config)
     }
 
     func updateCodexAppServerConfig(_ config: CodexAppServerConfig) {

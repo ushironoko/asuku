@@ -112,6 +112,24 @@ struct PendingRequestManagerTests {
         #expect(resolved == false)
     }
 
+    @Test("resolveAll sends the decision and removes every pending request")
+    func resolveAll() async {
+        let manager = PendingRequestManager()
+        let responder1 = MockIPCResponder()
+        let responder2 = MockIPCResponder()
+        await manager.addRequest(
+            event: makeEvent(requestId: "r1"), responder: responder1, timeoutSeconds: nil)
+        await manager.addRequest(
+            event: makeEvent(requestId: "r2"), responder: responder2, timeoutSeconds: nil)
+
+        let resolved = await manager.resolveAll(decision: .allow)
+
+        #expect(Set(resolved.map(\.id)) == ["r1", "r2"])
+        #expect(responder1.responses.map(\.decision) == [.allow])
+        #expect(responder2.responses.map(\.decision) == [.allow])
+        #expect(await manager.pendingCount == 0)
+    }
+
     // MARK: - remove
 
     @Test("remove deletes request without sending response")

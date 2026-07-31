@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var ntfySetupExpanded = false
     @State private var webhookPortText = ""
     @State private var timeoutDebounceTask: Task<Void, Never>?
+    @State private var showAutoApproveConfirmation = false
 
     var body: some View {
         Form {
@@ -42,6 +43,49 @@ struct SettingsView: View {
                             NSWorkspace.shared.open(url)
                         }
                     }
+                }
+            }
+
+            Section("Auto Approve") {
+                Toggle(
+                    "Automatically approve all permission requests",
+                    isOn: Binding(
+                        get: { appState.autoApproveConfig.isEnabled },
+                        set: { isEnabled in
+                            if isEnabled {
+                                showAutoApproveConfirmation = true
+                            } else {
+                                appState.autoApproveConfig.isEnabled = false
+                                appState.updateAutoApproveConfig(appState.autoApproveConfig)
+                                dispatch(.autoApproveConfigChanged)
+                            }
+                        }
+                    )
+                )
+                .alert("Enable Auto Approve?", isPresented: $showAutoApproveConfirmation) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Enable", role: .destructive) {
+                        appState.autoApproveConfig.isEnabled = true
+                        appState.updateAutoApproveConfig(appState.autoApproveConfig)
+                        dispatch(.autoApproveConfigChanged)
+                    }
+                } message: {
+                    Text(
+                        "Every permission request will be allowed without notification or review."
+                    )
+                }
+
+                if appState.autoApproveConfig.isEnabled {
+                    Label(
+                        "Every tool request is allowed immediately without notification or review. Use only in trusted sessions.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                } else {
+                    Text("Disabled by default. The setting is kept after restarting asuku.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 

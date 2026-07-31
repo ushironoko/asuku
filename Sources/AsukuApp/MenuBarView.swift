@@ -26,6 +26,13 @@ struct MenuBarView: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
+            if appState.autoApproveConfig.isEnabled {
+                Label("Auto Approve is enabled", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+            }
+
             // Active session status
             if let session = appState.activeSessions.first {
                 SessionStatusCompactView(session: session)
@@ -182,6 +189,7 @@ extension RecentEvent.Kind {
         case .notification: return "bell"
         case .permissionResponse(.allow): return "checkmark.circle"
         case .permissionResponse(.deny): return "xmark.circle"
+        case .autoApproved: return "checkmark.circle.fill"
         case .timeout: return "clock"
         }
     }
@@ -191,6 +199,7 @@ extension RecentEvent.Kind {
         case .notification: return .blue
         case .permissionResponse(.allow): return .green
         case .permissionResponse(.deny): return .red
+        case .autoApproved: return .green
         case .timeout: return .orange
         }
     }
