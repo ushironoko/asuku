@@ -191,6 +191,7 @@ extension RecentEvent.Kind {
         case .permissionResponse(.deny): return "xmark.circle"
         case .autoApproved: return "checkmark.circle.fill"
         case .timeout: return "clock"
+        case .disconnected: return "wifi.slash"
         }
     }
 
@@ -201,6 +202,7 @@ extension RecentEvent.Kind {
         case .permissionResponse(.deny): return .red
         case .autoApproved: return .green
         case .timeout: return .orange
+        case .disconnected: return .orange
         }
     }
 }

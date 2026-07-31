@@ -25,6 +25,11 @@ struct RecentEventTests {
         #expect(RecentEvent.Kind.autoApproved == RecentEvent.Kind.autoApproved)
     }
 
+    @Test("Kind.disconnected is equatable")
+    func kindDisconnected() {
+        #expect(RecentEvent.Kind.disconnected == RecentEvent.Kind.disconnected)
+    }
+
     @Test("Kind.permissionResponse equality with same decision")
     func kindPermissionResponseEqual() {
         #expect(
@@ -46,6 +51,7 @@ struct RecentEventTests {
     func kindDifferentCases() {
         #expect(RecentEvent.Kind.notification != RecentEvent.Kind.timeout)
         #expect(RecentEvent.Kind.notification != RecentEvent.Kind.autoApproved)
+        #expect(RecentEvent.Kind.notification != RecentEvent.Kind.disconnected)
         #expect(RecentEvent.Kind.notification != RecentEvent.Kind.permissionResponse(.allow))
         #expect(RecentEvent.Kind.timeout != RecentEvent.Kind.permissionResponse(.deny))
     }
@@ -82,6 +88,12 @@ struct RecentEventTests {
         #expect(event.displayText == "Edit — Timed Out")
     }
 
+    @Test("displayText for disconnected request shows Disconnected")
+    func displayTextDisconnected() {
+        let event = makeEvent(toolName: "Bash", kind: .disconnected)
+        #expect(event.displayText == "Bash — Disconnected")
+    }
+
     // MARK: - timeText
 
     @Test("timeText produces non-empty relative time string")
@@ -113,6 +125,7 @@ struct RecentEventTests {
             ("deny", .permissionResponse(.deny)),
             ("autoApprove", .autoApproved),
             ("timeout", .timeout),
+            ("disconnected", .disconnected),
         ]
         let texts = kinds.map { (label, kind) in
             let event = makeEvent(toolName: "Bash", kind: kind)
@@ -126,6 +139,7 @@ struct RecentEventTests {
             deny: Bash — Denied
             autoApprove: Bash — Auto-approved
             timeout: Bash — Timed Out
+            disconnected: Bash — Disconnected
             """
         }
     }
