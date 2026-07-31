@@ -2,13 +2,14 @@ import AsukuShared
 import Foundation
 
 /// Recent event for history display.
-/// Kind enum makes the 3 valid states explicit — no more Bool + Optional combinations.
+/// Kind enum makes all valid activity states explicit.
 public struct RecentEvent: Identifiable, Sendable {
     public enum Kind: Sendable, Equatable {
         case permissionResponse(PermissionDecision)
         case autoApproved
         case notification
         case timeout
+        case disconnected
     }
 
     public let id: String
@@ -41,6 +42,8 @@ public struct RecentEvent: Identifiable, Sendable {
             return "\(toolName) — Auto-approved"
         case .timeout:
             return "\(toolName) — Timed Out"
+        case .disconnected:
+            return "\(toolName) — Disconnected"
         }
     }
 

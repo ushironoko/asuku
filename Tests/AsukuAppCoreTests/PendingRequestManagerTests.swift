@@ -128,6 +128,7 @@ struct PendingRequestManagerTests {
         #expect(responder1.responses.map(\.decision) == [.allow])
         #expect(responder2.responses.map(\.decision) == [.allow])
         #expect(await manager.pendingCount == 0)
+        #expect(await manager.remove(requestId: "r1") == nil)
     }
 
     // MARK: - remove
@@ -139,11 +140,27 @@ struct PendingRequestManagerTests {
         let event = makeEvent(requestId: "r1")
         await manager.addRequest(event: event, responder: responder, timeoutSeconds: nil)
 
-        await manager.remove(requestId: "r1")
+        let removed = await manager.remove(requestId: "r1")
 
         let count = await manager.pendingCount
+        #expect(removed?.id == "r1")
         #expect(count == 0)
         #expect(responder.responses.isEmpty)
+    }
+
+    @Test("remove returns nil when a disconnect follows resolution")
+    func removeAfterResolution() async {
+        let manager = PendingRequestManager()
+        let responder = MockIPCResponder()
+        await manager.addRequest(
+            event: makeEvent(requestId: "r1"), responder: responder, timeoutSeconds: nil)
+        #expect(await manager.resolve(requestId: "r1", decision: .allow) == true)
+
+        let removed = await manager.remove(requestId: "r1")
+
+        #expect(removed == nil)
+        #expect(responder.responses.map(\.decision) == [.allow])
+        #expect(await manager.pendingCount == 0)
     }
 
     // MARK: - PendingRequest properties

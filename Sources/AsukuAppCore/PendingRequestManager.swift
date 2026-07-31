@@ -151,9 +151,13 @@ public actor PendingRequestManager {
         return pending
     }
 
-    /// Removes a pending request (e.g., on disconnect) without sending a response
-    public func remove(requestId: String) {
+    /// Removes a pending request (e.g., on disconnect) without sending a response.
+    /// Returns nil when the request was already resolved or previously removed.
+    @discardableResult
+    public func remove(requestId: String) -> PendingRequest? {
+        guard let request = requests[requestId] else { return nil }
         cleanup(requestId: requestId)
+        return request
     }
 
     /// Gets a specific pending request
