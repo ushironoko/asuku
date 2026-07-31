@@ -138,6 +138,19 @@ public actor PendingRequestManager {
         return true
     }
 
+    /// Resolves every currently pending request and returns the requests that were resolved.
+    /// The operation is actor-isolated so no other request mutation can interleave with the batch.
+    public func resolveAll(decision: PermissionDecision) -> [PendingRequest] {
+        let pending = pendingRequests
+        for request in pending {
+            request.responder.send(
+                IPCResponse(requestId: request.id, decision: decision)
+            )
+            cleanup(requestId: request.id)
+        }
+        return pending
+    }
+
     /// Removes a pending request (e.g., on disconnect) without sending a response
     public func remove(requestId: String) {
         cleanup(requestId: requestId)

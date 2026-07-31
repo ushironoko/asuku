@@ -101,8 +101,9 @@ final class NotificationManager: NSObject, @unchecked Sendable,
         }
     }
 
-    /// Remove a delivered notification by its identifier
+    /// Remove a pending or delivered notification by its identifier.
     func removeNotification(identifier: String) {
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
         center.removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 

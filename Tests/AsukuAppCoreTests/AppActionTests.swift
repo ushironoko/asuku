@@ -40,6 +40,11 @@ struct AppActionTests {
         #expect(AppAction.timeoutConfigChanged == AppAction.timeoutConfigChanged)
     }
 
+    @Test("autoApproveConfigChanged actions are equal")
+    func autoApproveConfigChangedEqual() {
+        #expect(AppAction.autoApproveConfigChanged == AppAction.autoApproveConfigChanged)
+    }
+
     @Test("stop actions are equal")
     func stopEqual() {
         #expect(AppAction.stop == AppAction.stop)
@@ -50,14 +55,19 @@ struct AppActionTests {
         let resolve = AppAction.resolveRequest(requestId: "r", decision: .allow)
         let ntfyChanged = AppAction.ntfyConfigChanged
         let timeoutChanged = AppAction.timeoutConfigChanged
+        let autoApproveChanged = AppAction.autoApproveConfigChanged
         let stop = AppAction.stop
 
         #expect(resolve != ntfyChanged)
         #expect(resolve != timeoutChanged)
+        #expect(resolve != autoApproveChanged)
         #expect(resolve != stop)
         #expect(ntfyChanged != timeoutChanged)
+        #expect(ntfyChanged != autoApproveChanged)
         #expect(ntfyChanged != stop)
+        #expect(timeoutChanged != autoApproveChanged)
         #expect(timeoutChanged != stop)
+        #expect(autoApproveChanged != stop)
     }
 
     // MARK: - Exhaustive switch
@@ -69,6 +79,7 @@ struct AppActionTests {
             .resolveRequest(requestId: "r2", decision: .deny),
             .ntfyConfigChanged,
             .timeoutConfigChanged,
+            .autoApproveConfigChanged,
             .refreshQuotaCost,
             .stop,
             .quit,
@@ -83,6 +94,8 @@ struct AppActionTests {
                 descriptions.append("ntfyConfigChanged")
             case .timeoutConfigChanged:
                 descriptions.append("timeoutConfigChanged")
+            case .autoApproveConfigChanged:
+                descriptions.append("autoApproveConfigChanged")
             case .refreshQuotaCost:
                 descriptions.append("refreshQuotaCost")
             case .stop:
@@ -98,6 +111,7 @@ struct AppActionTests {
             resolve(r2, deny)
             ntfyConfigChanged
             timeoutConfigChanged
+            autoApproveConfigChanged
             refreshQuotaCost
             stop
             quit
@@ -140,6 +154,12 @@ struct AppActionTests {
         assertInlineSnapshot(of: AppAction.timeoutConfigChanged, as: .dump) {
             """
             - AppAction.timeoutConfigChanged
+
+            """
+        }
+        assertInlineSnapshot(of: AppAction.autoApproveConfigChanged, as: .dump) {
+            """
+            - AppAction.autoApproveConfigChanged
 
             """
         }

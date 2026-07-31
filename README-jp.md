@@ -11,6 +11,7 @@ Claude Code がツール（Bash, Write, Edit 等）の実行許可を求める�
 - **macOS通知** — Allow / Deny アクション付きの Alert スタイル通知
 - **メニューバーUI** — 許可待ちリクエスト一覧、クイックアクション、最近のアクティビティ
 - **iPhone通知** — ntfy + Cloudflare Tunnel 経由でリモート応答（opt-in）
+- **Auto Approve** — すべての許可リクエストを即時Allow（オプション、初期値OFF）
 - **自動Denyタイムアウト** — 280秒で自動的に Deny
 - **機密データマスク** — トークンやAPIキーは通知上でマスクされる
 - **ワンクリックhookインストール** — Claude Code の設定にフックを自動登録
@@ -53,6 +54,20 @@ Claude Code をいつも通り起動するだけです。ツール実行の許�
 - **メニューバーのドロップダウン** にも Allow / Deny ボタン付きで表示
 
 どちらからでも応答できます。280秒以内に応答がなければ自動的に Deny されます。
+
+## Auto Approve
+
+**Settings → Auto Approve** で **Automatically approve all permission requests** を有効にすると、届いたすべての許可リクエストを即時Allowできます。
+
+有効な間は以下のように動作します：
+
+- すべてのツールを確認なしで許可
+- 有効にした時点ですでに許可待ちのリクエストもAllow
+- 新しい許可リクエストはmacOS／iPhone通知および許可待ち一覧に表示しない
+- Recent Activityに **Auto-approved** として記録
+- asukuを再起動しても、明示的にOFFにするまで設定を保持
+
+> **警告:** Auto Approveを有効にすると、シェルコマンドやファイル変更を含むすべてのツール実行をClaude Codeが確認なしで行えます。初期値はOFFです。信頼できるセッションと環境でのみ有効にしてください。
 
 ## iPhone通知 (ntfy)
 

@@ -11,6 +11,7 @@ When Claude Code needs permission to run a tool (Bash, Write, Edit, etc.), asuku
 - **macOS notifications** — Alert-style with Allow / Deny actions
 - **Menu bar UI** — Pending requests, quick actions, recent activity
 - **iPhone notifications** — Respond remotely via ntfy + Cloudflare Tunnel (opt-in)
+- **Auto Approve** — Optionally allow every permission request immediately (disabled by default)
 - **Auto-deny timeout** — Automatically denies after 280s
 - **Sensitive data masking** — Tokens and API keys are masked in notifications
 - **One-click hook install** — Registers hooks in Claude Code settings
@@ -53,6 +54,20 @@ Start Claude Code as usual. When it needs permission, you'll see:
 - The request in the **menu bar dropdown** with Allow / Deny buttons
 
 Respond from either place. If you don't respond within 280 seconds, the request is automatically denied.
+
+## Auto Approve
+
+Open **Settings → Auto Approve** and enable **Automatically approve all permission requests** to allow every incoming request immediately.
+
+While enabled:
+
+- All tools are allowed without review
+- Requests already waiting for a response are allowed when you enable the setting
+- New permission requests do not appear in macOS or iPhone notifications, or in the pending-request list
+- Each approval is recorded as **Auto-approved** in Recent Activity
+- The setting remains enabled after restarting asuku until you turn it off
+
+> **Warning:** Auto Approve lets Claude Code run any requested tool without confirmation, including shell commands and file modifications. It is disabled by default. Enable it only for trusted sessions and environments.
 
 ## iPhone Notifications (ntfy)
 

@@ -20,6 +20,11 @@ struct RecentEventTests {
         #expect(RecentEvent.Kind.timeout == RecentEvent.Kind.timeout)
     }
 
+    @Test("Kind.autoApproved is equatable")
+    func kindAutoApproved() {
+        #expect(RecentEvent.Kind.autoApproved == RecentEvent.Kind.autoApproved)
+    }
+
     @Test("Kind.permissionResponse equality with same decision")
     func kindPermissionResponseEqual() {
         #expect(
@@ -40,6 +45,7 @@ struct RecentEventTests {
     @Test("Different Kind cases are not equal")
     func kindDifferentCases() {
         #expect(RecentEvent.Kind.notification != RecentEvent.Kind.timeout)
+        #expect(RecentEvent.Kind.notification != RecentEvent.Kind.autoApproved)
         #expect(RecentEvent.Kind.notification != RecentEvent.Kind.permissionResponse(.allow))
         #expect(RecentEvent.Kind.timeout != RecentEvent.Kind.permissionResponse(.deny))
     }
@@ -62,6 +68,12 @@ struct RecentEventTests {
     func displayTextDeny() {
         let event = makeEvent(toolName: "Write", kind: .permissionResponse(.deny))
         #expect(event.displayText == "Write — Denied")
+    }
+
+    @Test("displayText for auto-approved request shows Auto-approved")
+    func displayTextAutoApproved() {
+        let event = makeEvent(toolName: "Bash", kind: .autoApproved)
+        #expect(event.displayText == "Bash — Auto-approved")
     }
 
     @Test("displayText for timeout shows Timed Out")
@@ -99,6 +111,7 @@ struct RecentEventTests {
             ("notification", .notification),
             ("allow", .permissionResponse(.allow)),
             ("deny", .permissionResponse(.deny)),
+            ("autoApprove", .autoApproved),
             ("timeout", .timeout),
         ]
         let texts = kinds.map { (label, kind) in
@@ -111,6 +124,7 @@ struct RecentEventTests {
             notification: Bash
             allow: Bash — Allowed
             deny: Bash — Denied
+            autoApprove: Bash — Auto-approved
             timeout: Bash — Timed Out
             """
         }
