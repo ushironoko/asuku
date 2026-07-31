@@ -323,17 +323,27 @@ enum CodexBinary {
         return dirs.filter { seen.insert($0).inserted }
     }
 
-    /// Absolute path to a runnable `codex`, or nil if none is found.
+    /// Runnable `codex` candidates in search order. Keep every candidate: a GUI app may find a
+    /// launcher whose shebang interpreter is absent from its minimal PATH, while a later standalone
+    /// binary remains usable.
+    static func locateAll(
+        fileManager: FileManager = .default,
+        home: String = NSHomeDirectory(),
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String] {
+        searchDirectories(home: home, environment: environment).compactMap { dir in
+            let candidate = dir + "/codex"
+            return isRunnable(candidate, fileManager: fileManager) ? candidate : nil
+        }
+    }
+
+    /// First runnable `codex` candidate, retained for callers that only need discovery.
     static func locate(
         fileManager: FileManager = .default,
         home: String = NSHomeDirectory(),
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> String? {
-        for dir in searchDirectories(home: home, environment: environment) {
-            let candidate = dir + "/codex"
-            if isRunnable(candidate, fileManager: fileManager) { return candidate }
-        }
-        return nil
+        locateAll(fileManager: fileManager, home: home, environment: environment).first
     }
 
     /// PATH string to hand the child so a launcher shim can resolve its interpreter.
@@ -358,24 +368,38 @@ enum CodexBinary {
 /// `CodexAppServerRunning` backed by a real `codex app-server` subprocess.
 public struct ProcessCodexAppServer: CodexAppServerRunning {
     private let timeout: Duration
-    private let locate: @Sendable () -> String?
+    private let locateCandidates: @Sendable () -> [String]
     private let childPath: @Sendable () -> String
 
     public init(timeout: Duration = .seconds(8)) {
-        self.init(timeout: timeout, locate: { CodexBinary.locate() }, childPath: { CodexBinary.childPath() })
+        self.init(
+            timeout: timeout,
+            locateCandidates: { CodexBinary.locateAll() },
+            childPath: { CodexBinary.childPath() }
+        )
     }
 
     init(timeout: Duration,
-         locate: @escaping @Sendable () -> String?,
+         locateCandidates: @escaping @Sendable () -> [String],
          childPath: @escaping @Sendable () -> String) {
         self.timeout = timeout
-        self.locate = locate
+        self.locateCandidates = locateCandidates
         self.childPath = childPath
     }
 
     public func readRateLimits() async -> Data? {
-        guard let binary = locate() else { return nil }
-        guard let transport = ProcessLineDuplex.start(binary: binary, path: childPath()) else { return nil }
-        return await CodexAppServerDriver.readRateLimits(over: transport, timeout: timeout)
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        let path = childPath()
+        for binary in locateCandidates() {
+            if Task.isCancelled { return nil }
+            let remaining = clock.now.duration(to: deadline)
+            if remaining <= .zero { return nil }
+            guard let transport = ProcessLineDuplex.start(binary: binary, path: path) else { continue }
+            if let data = await CodexAppServerDriver.readRateLimits(over: transport, timeout: remaining) {
+                return data
+            }
+        }
+        return nil
     }
 }

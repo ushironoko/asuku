@@ -50,6 +50,55 @@ struct CodexBinaryTests {
         #expect(entries.contains("/opt/homebrew/bin"))
     }
 
+    @Test("app-server retries a later Codex candidate when an earlier launcher cannot run")
+    func appServerRetriesCandidates() async throws {
+        let directory = NSTemporaryDirectory() + "asuku-codex-candidates-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+
+        let brokenDirectory = directory + "/.bun/bin"
+        let workingDirectory = directory + "/.local/bin"
+        try FileManager.default.createDirectory(atPath: brokenDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: workingDirectory, withIntermediateDirectories: true)
+
+        let broken = brokenDirectory + "/codex"
+        FileManager.default.createFile(
+            atPath: broken,
+            contents: Data("#!/usr/bin/env asuku-missing-interpreter\n".utf8),
+            attributes: [.posixPermissions: 0o755]
+        )
+
+        let working = workingDirectory + "/codex"
+        let appServerStub = #"""
+        #!/bin/sh
+        IFS= read -r _
+        printf '%s\n' '{"jsonrpc":"2.0","id":0,"result":{"userAgent":"stub"}}'
+        IFS= read -r _
+        IFS= read -r _
+        printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"rateLimits":{"primary":{"usedPercent":73,"windowDurationMins":300}}}}'
+        """#
+        FileManager.default.createFile(
+            atPath: working,
+            contents: Data(appServerStub.utf8),
+            attributes: [.posixPermissions: 0o755]
+        )
+
+        let candidates = CodexBinary.locateAll(
+            home: directory,
+            environment: ["PATH": "/usr/bin:/bin"]
+        ).filter { $0 == broken || $0 == working }
+        #expect(candidates == [broken, working])
+
+        let server = ProcessCodexAppServer(
+            timeout: .seconds(2),
+            locateCandidates: { candidates },
+            childPath: { "/usr/bin:/bin" }
+        )
+        let data = try #require(await server.readRateLimits())
+        let usage = try #require(CodexAppServerParser.parse(data, now: Date()))
+        #expect(usage.window(.fiveHour)?.usedPercent == 73)
+    }
+
     /// Live end-to-end against the installed `codex`. Skipped unless ASUKU_LIVE_CODEX=1 (needs a
     /// logged-in codex). Verifies the real ProcessCodexAppServer transport + parser round-trip.
     @Test("live: reads real account rate limits from the installed codex",
